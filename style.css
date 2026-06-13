@@ -13,6 +13,8 @@ html, body {
   overflow: hidden;
   background: #0a0a1a;
   font-family: monospace;
+  touch-action: none;           /* Chrome のスクロール割り込み防止 */
+  overscroll-behavior: none;    /* Chrome の引っ張り更新防止 */
 }
 
 #game-wrap {
@@ -29,7 +31,7 @@ html, body {
   flex: 1 1 0;
   min-height: 0;
   width: 100%;
-  touch-action: none; /* タッチイベントをJSで処理 */
+  touch-action: none;
   cursor: crosshair;
 }
 
