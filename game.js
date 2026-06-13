@@ -33,6 +33,7 @@ function beep(freq, dur, type = 'square', vol = 0.07) {
 // ── Input ────────────────────────────────────────────────────────────────
 const inp = { left: false, right: false, shoot: false };
 
+// キーボード（PC用）
 window.addEventListener('keydown', e => {
   if (e.code === 'ArrowLeft'  || e.code === 'KeyA') inp.left  = true;
   if (e.code === 'ArrowRight' || e.code === 'KeyD') inp.right = true;
@@ -45,30 +46,75 @@ window.addEventListener('keyup', e => {
   if (e.code === 'Space') inp.shoot = false;
 });
 
-function btn(id, down, up) {
-  const el = document.getElementById(id);
-  const d = ev => { ev.preventDefault(); down(); };
-  const u = ev => { ev.preventDefault(); if (up) up(); };
-  el.addEventListener('touchstart',  d, { passive: false });
-  el.addEventListener('touchend',    u, { passive: false });
-  el.addEventListener('touchcancel', u, { passive: false });
-  el.addEventListener('mousedown', d);
-  el.addEventListener('mouseup',   u);
-  el.addEventListener('mouseleave', u);
-}
+// FIREボタン（補助）
+const fireBtn = document.getElementById('btn-shoot');
+fireBtn.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (_ac && _ac.state === 'suspended') _ac.resume();
+  action();
+  inp.shoot = true;
+}, { passive: false });
+fireBtn.addEventListener('touchend',    e => { e.preventDefault(); inp.shoot = false; }, { passive: false });
+fireBtn.addEventListener('touchcancel', e => { e.preventDefault(); inp.shoot = false; }, { passive: false });
+fireBtn.addEventListener('mousedown', () => { action(); inp.shoot = true; });
+fireBtn.addEventListener('mouseup',   () => { inp.shoot = false; });
 
-btn('btn-left',
-  () => inp.left  = true,
-  () => inp.left  = false
-);
-btn('btn-right',
-  () => inp.right = true,
-  () => inp.right = false
-);
-btn('btn-shoot',
-  () => { inp.shoot = true;  action(); },
-  () => inp.shoot = false
-);
+// ── キャンバスタッチ操作（メイン） ──────────────────────────────────────
+// スライド → 移動、タップ → 射撃 / ゲーム開始
+let touchId      = null;  // 追跡中のタッチID
+let touchStartX  = 0;
+let touchLastX   = 0;
+let touchStartY  = 0;
+let touchMoved   = false;
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (_ac && _ac.state === 'suspended') _ac.resume();
+
+  // 非プレイ中はどこでもタップでスタート
+  if (state !== 'playing') { action(); return; }
+
+  // すでに追跡中の指がなければ新しい指を追跡開始
+  if (touchId === null) {
+    const t = e.changedTouches[0];
+    touchId     = t.identifier;
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    touchLastX  = t.clientX;
+    touchMoved  = false;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier !== touchId) continue;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    // 指のX座標にプレイヤー中心を合わせる
+    const canvasX = (t.clientX - rect.left) * scaleX;
+    player.x = Math.max(0, Math.min(canvas.width - player.w, canvasX - player.w / 2));
+    if (Math.abs(t.clientX - touchStartX) > 8) touchMoved = true;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier !== touchId) continue;
+    touchId = null;
+    // 動きが少なければタップ → 射撃
+    if (!touchMoved && state === 'playing') inp.shoot = true;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchcancel', e => {
+  e.preventDefault();
+  touchId = null;
+}, { passive: false });
+
+// タップ射撃フラグを次フレームでリセット
+function clearTapShoot() { inp.shoot = false; }
 
 // ── State ────────────────────────────────────────────────────────────────
 let state   = 'title'; // title | playing | dead | win
@@ -209,6 +255,8 @@ function update() {
     beep(900, 0.07);
     shootCooldown = 12;
   }
+  // タップ射撃は1フレームだけ有効
+  if (inp.shoot && touchId === null) inp.shoot = false;
 
   // Move player bullet
   if (bullet) {
@@ -467,11 +515,11 @@ function drawTitle() {
 
   ctx.fillStyle = '#ffd93d';
   ctx.font = `${Math.max(12, canvas.height * 0.036)}px monospace`;
-  ctx.fillText('TAP  ●  TO START', cx, canvas.height * 0.86);
+  ctx.fillText('TAP ANYWHERE TO START', cx, canvas.height * 0.84);
 
-  ctx.fillStyle = 'rgba(180,180,180,0.7)';
-  ctx.font = `${Math.max(9, canvas.height * 0.024)}px monospace`;
-  ctx.fillText('Arrow keys / Space on desktop', cx, canvas.height * 0.92);
+  ctx.fillStyle = 'rgba(180,180,180,0.75)';
+  ctx.font = `${Math.max(9, canvas.height * 0.026)}px monospace`;
+  ctx.fillText('SLIDE to move  /  TAP to shoot', cx, canvas.height * 0.91);
   ctx.textAlign = 'left';
 }
 
