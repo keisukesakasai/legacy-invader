@@ -46,75 +46,59 @@ window.addEventListener('keyup', e => {
   if (e.code === 'Space') inp.shoot = false;
 });
 
-// FIREボタン（補助）
+// ── Pointer Events でタッチ/マウス統一（Chrome/Safari両対応）──────────────
+// キャンバス: スライド → 移動、タップ → 射撃/ゲーム開始
+// FIREボタン: タップ → 射撃/ゲーム開始（補助）
+let activePtr   = null;  // 追跡中のポインターID
+let touchStartX = 0;
+let touchMoved  = false;
+
+canvas.style.touchAction = 'none'; // JS側でタッチを完全制御
+
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (_ac && _ac.state === 'suspended') _ac.resume();
+
+  if (state !== 'playing') { action(); return; }
+
+  if (activePtr === null) {
+    activePtr   = e.pointerId;
+    canvas.setPointerCapture(e.pointerId); // 指が外に出ても追跡継続
+    touchStartX = e.clientX;
+    touchMoved  = false;
+  }
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (e.pointerId !== activePtr) return;
+  const rect   = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const cx     = (e.clientX - rect.left) * scaleX;
+  player.x = Math.max(0, Math.min(canvas.width - player.w, cx - player.w / 2));
+  if (Math.abs(e.clientX - touchStartX) > 8) touchMoved = true;
+});
+
+canvas.addEventListener('pointerup', e => {
+  if (e.pointerId !== activePtr) return;
+  activePtr = null;
+  if (!touchMoved && state === 'playing') inp.shoot = true;
+});
+
+canvas.addEventListener('pointercancel', e => {
+  if (e.pointerId === activePtr) activePtr = null;
+});
+
+// FIREボタン
 const fireBtn = document.getElementById('btn-shoot');
-fireBtn.addEventListener('touchstart', e => {
+fireBtn.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (_ac && _ac.state === 'suspended') _ac.resume();
   action();
   inp.shoot = true;
-}, { passive: false });
-fireBtn.addEventListener('touchend',    e => { e.preventDefault(); inp.shoot = false; }, { passive: false });
-fireBtn.addEventListener('touchcancel', e => { e.preventDefault(); inp.shoot = false; }, { passive: false });
-fireBtn.addEventListener('mousedown', () => { action(); inp.shoot = true; });
-fireBtn.addEventListener('mouseup',   () => { inp.shoot = false; });
-
-// ── キャンバスタッチ操作（メイン） ──────────────────────────────────────
-// スライド → 移動、タップ → 射撃 / ゲーム開始
-let touchId      = null;  // 追跡中のタッチID
-let touchStartX  = 0;
-let touchLastX   = 0;
-let touchStartY  = 0;
-let touchMoved   = false;
-
-canvas.addEventListener('touchstart', e => {
-  e.preventDefault();
-  if (_ac && _ac.state === 'suspended') _ac.resume();
-
-  // 非プレイ中はどこでもタップでスタート
-  if (state !== 'playing') { action(); return; }
-
-  // すでに追跡中の指がなければ新しい指を追跡開始
-  if (touchId === null) {
-    const t = e.changedTouches[0];
-    touchId     = t.identifier;
-    touchStartX = t.clientX;
-    touchStartY = t.clientY;
-    touchLastX  = t.clientX;
-    touchMoved  = false;
-  }
-}, { passive: false });
-
-canvas.addEventListener('touchmove', e => {
-  e.preventDefault();
-  for (const t of e.changedTouches) {
-    if (t.identifier !== touchId) continue;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    // 指のX座標にプレイヤー中心を合わせる
-    const canvasX = (t.clientX - rect.left) * scaleX;
-    player.x = Math.max(0, Math.min(canvas.width - player.w, canvasX - player.w / 2));
-    if (Math.abs(t.clientX - touchStartX) > 8) touchMoved = true;
-  }
-}, { passive: false });
-
-canvas.addEventListener('touchend', e => {
-  e.preventDefault();
-  for (const t of e.changedTouches) {
-    if (t.identifier !== touchId) continue;
-    touchId = null;
-    // 動きが少なければタップ → 射撃
-    if (!touchMoved && state === 'playing') inp.shoot = true;
-  }
-}, { passive: false });
-
-canvas.addEventListener('touchcancel', e => {
-  e.preventDefault();
-  touchId = null;
-}, { passive: false });
-
-// タップ射撃フラグを次フレームでリセット
-function clearTapShoot() { inp.shoot = false; }
+});
+fireBtn.addEventListener('pointerup',     () => inp.shoot = false);
+fireBtn.addEventListener('pointercancel', () => inp.shoot = false);
+fireBtn.addEventListener('pointerleave',  () => inp.shoot = false);
 
 // ── State ────────────────────────────────────────────────────────────────
 let state   = 'title'; // title | playing | dead | win
@@ -256,7 +240,7 @@ function update() {
     shootCooldown = 12;
   }
   // タップ射撃は1フレームだけ有効
-  if (inp.shoot && touchId === null) inp.shoot = false;
+  if (inp.shoot && activePtr === null) inp.shoot = false;
 
   // Move player bullet
   if (bullet) {
