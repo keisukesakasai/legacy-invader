@@ -11,10 +11,9 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #0a0a1a;
-  font-family: monospace;
-  touch-action: none;           /* Chrome のスクロール割り込み防止 */
-  overscroll-behavior: none;    /* Chrome の引っ張り更新防止 */
+  background: #050510;
+  touch-action: none;
+  overscroll-behavior: none;
 }
 
 #game-wrap {
@@ -32,7 +31,6 @@ html, body {
   min-height: 0;
   width: 100%;
   touch-action: none;
-  cursor: crosshair;
 }
 
 #controls {
@@ -42,29 +40,32 @@ html, body {
   align-items: center;
   width: 100%;
   padding: 8px 0 12px;
+  background: #050510;
 }
 
 .fire-btn {
-  width: 120px;
-  height: 52px;
-  border-radius: 26px;
+  width: 130px;
+  height: 48px;
+  border-radius: 6px;
   border: 2px solid rgba(255, 80, 80, 0.5);
-  background: rgba(255, 80, 80, 0.14);
+  background: rgba(255, 80, 80, 0.08);
   color: #ff6b6b;
-  font-family: monospace;
-  font-size: 18px;
-  font-weight: bold;
-  letter-spacing: 2px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
   cursor: pointer;
   touch-action: none;
+  box-shadow: 0 0 14px rgba(255, 80, 80, 0.2), inset 0 0 8px rgba(255, 80, 80, 0.05);
+  transition: background 0.06s, box-shadow 0.06s, border-color 0.06s;
 }
 
 .fire-btn:active {
-  background: rgba(255, 80, 80, 0.32);
-  border-color: rgba(255, 80, 80, 0.8);
+  background: rgba(255, 80, 80, 0.28);
+  border-color: rgba(255, 80, 80, 0.9);
+  box-shadow: 0 0 24px rgba(255, 80, 80, 0.5), inset 0 0 12px rgba(255, 80, 80, 0.1);
 }
 
 @media (min-height: 700px) {
-  .fire-btn { width: 140px; height: 60px; font-size: 20px; }
-  #controls { padding-bottom: 20px; }
+  .fire-btn  { width: 150px; height: 56px; font-size: 12px; }
+  #controls  { padding-bottom: 20px; }
 }
