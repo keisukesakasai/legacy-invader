@@ -4,11 +4,11 @@ import * as THREE from 'three';
 const canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setClearColor(0x050510);
+renderer.setClearColor(0x050815);
 
 // ── Scene & Camera ────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x050510, 0.014);
+scene.fog = new THREE.FogExp2(0x050815, 0.016);
 
 const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
 camera.position.set(0, 10, 22);
@@ -25,43 +25,103 @@ window.addEventListener('resize', resize);
 resize();
 
 // ── Lights ────────────────────────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x223355, 5));
-const dirLight = new THREE.DirectionalLight(0x99aaff, 2.5);
-dirLight.position.set(4, 12, 8);
-scene.add(dirLight);
+// City night: sky=deep blue, ground=warm orange (light pollution)
+scene.add(new THREE.HemisphereLight(0x112244, 0xcc6622, 2.5));
+const moonLight = new THREE.DirectionalLight(0x8899cc, 1.8);
+moonLight.position.set(-5, 20, 10);
+scene.add(moonLight);
 const playerGlow = new THREE.PointLight(0x4fc3f7, 8, 14);
 scene.add(playerGlow);
 const invGlow = new THREE.PointLight(0xff4422, 3, 35);
 invGlow.position.set(0, 4, -8);
 scene.add(invGlow);
+// City ambient warmth from below
+const cityAmbient = new THREE.PointLight(0xff7722, 1.5, 60);
+cityAmbient.position.set(0, -15, 0);
+scene.add(cityAmbient);
 
-// ── Stars ─────────────────────────────────────────────────────────────────
+// ── Stars (city: fewer, dimmer) ───────────────────────────────────────────
 {
-  const N = 700, pos = new Float32Array(N * 3);
+  const N = 250, pos = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {
     const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
-    const r = 55 + Math.random() * 45;
+    const r = 70 + Math.random() * 30;
     pos[i*3]   = r * Math.sin(ph) * Math.cos(th);
-    pos[i*3+1] = Math.abs(r * Math.cos(ph)) + 2;
+    pos[i*3+1] = Math.abs(r * Math.cos(ph)) + 15;
     pos[i*3+2] = r * Math.sin(ph) * Math.sin(th);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.28, sizeAttenuation: true, transparent: true, opacity: 0.9 })));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xaabbdd, size: 0.2, sizeAttenuation: true, transparent: true, opacity: 0.45 })));
 }
 
-// ── Grid floor ────────────────────────────────────────────────────────────
+// ── City scene ────────────────────────────────────────────────────────────
 {
-  const grid = new THREE.GridHelper(100, 50, 0x001566, 0x001566);
-  grid.position.y = -0.8;
-  scene.add(grid);
+  // Plaza / rooftop floor
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(100, 100),
-    new THREE.MeshStandardMaterial({ color: 0x010210, roughness: 1 })
+    new THREE.PlaneGeometry(120, 120),
+    new THREE.MeshStandardMaterial({ color: 0x0a0e18, roughness: 0.95 })
   );
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -0.82;
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -1.0;
   scene.add(floor);
+
+  // Street grid far below (city ground)
+  const streetGrid = new THREE.GridHelper(300, 80, 0x1a2a10, 0x0d1808);
+  streetGrid.position.y = -25;
+  scene.add(streetGrid);
+}
+
+// ── Buildings ─────────────────────────────────────────────────────────────
+function makeWinTex() {
+  const rows=22, cols=10, c=document.createElement('canvas');
+  c.width=cols*8; c.height=rows*8;
+  const cx=c.getContext('2d');
+  cx.fillStyle='#060a14'; cx.fillRect(0,0,c.width,c.height);
+  for(let r=0;r<rows;r++) for(let cl=0;cl<cols;cl++) {
+    if(Math.random()>0.48){
+      cx.fillStyle=Math.random()>0.2?'#ffe090':'#88aaff';
+      cx.globalAlpha=0.3+Math.random()*0.7;
+      cx.fillRect(cl*8+1,r*8+1,6,6);
+    }
+  }
+  cx.globalAlpha=1;
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; return t;
+}
+
+{
+  const texPool=[makeWinTex(),makeWinTex(),makeWinTex()];
+  function addBuilding(x,z,w,d,h){
+    const tex=texPool[Math.floor(Math.random()*3)];
+    const faceMat=()=>new THREE.MeshStandardMaterial({map:tex.clone(),roughness:0.85,metalness:0.1,color:0x0d1520});
+    const topMat=new THREE.MeshStandardMaterial({color:0x080c14,roughness:1});
+    const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[faceMat(),faceMat(),topMat,topMat,faceMat(),faceMat()]);
+    mesh.position.set(x,h/2-1.0,z); scene.add(mesh);
+    // Rooftop light
+    if(Math.random()>0.55){
+      const pl=new THREE.PointLight(Math.random()>0.5?0xff4400:0x4488ff,0.4+Math.random()*0.6,8);
+      pl.position.set(x,h-1.0+0.5,z); scene.add(pl);
+    }
+  }
+  const rn=(a,b)=>a+Math.random()*(b-a);
+  // Left canyon wall
+  for(let z=-28;z<=22;z+=rn(3,7)){
+    addBuilding(rn(-14,-22),z,rn(2,5),rn(2,5),rn(5,32));
+    if(Math.random()>0.45) addBuilding(rn(-22,-32),z+rn(-2,2),rn(3,7),rn(3,6),rn(4,22));
+  }
+  // Right canyon wall
+  for(let z=-28;z<=22;z+=rn(3,7)){
+    addBuilding(rn(14,22),z,rn(2,5),rn(2,5),rn(5,32));
+    if(Math.random()>0.45) addBuilding(rn(22,32),z+rn(-2,2),rn(3,7),rn(3,6),rn(4,22));
+  }
+  // Background skyline
+  for(let x=-30;x<=30;x+=rn(3,7)){
+    addBuilding(x,rn(-25,-40),rn(3,8),rn(3,7),rn(12,50));
+  }
+  // Foreground accent (near camera)
+  for(const sx of[-1,1]){
+    addBuilding(sx*rn(13,16),rn(15,20),rn(3,5),rn(3,5),rn(4,14));
+  }
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────
@@ -303,16 +363,24 @@ function spawnBullets() {
   const bcolor = tripleTimer > 0 ? 0x00e5ff : rapidTimer > 0 ? 0xffcc00 : 0xffffff;
   const mat = new THREE.MeshBasicMaterial({ color: bcolor });
   const bz = playerMesh.position.z - 1.2;
-  const make = (x, vz, vx) => {
+  const by = 0.8;
+  // Aim toward center of alive invader formation
+  const alive = grid.filter(i => i.alive);
+  const targetZ = alive.length ? Math.min(...alive.map(i => i.z)) - 1 : -12;
+  const targetY = alive.length ? alive.reduce((s, i) => s + i.y, 0) / alive.length : 4.5;
+  const dz = targetZ - bz, dy = targetY - by;
+  const spd = 0.58, len = Math.sqrt(dz*dz + dy*dy);
+  const bvz = spd * (dz / len), bvy = spd * (dy / len);
+  const make = (x, vx) => {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.7, 6), mat.clone());
-    m.rotation.x = Math.PI/2; m.position.set(x, 0.8, bz);
+    m.rotation.x = Math.PI/2; m.position.set(x, by, bz);
     scene.add(m);
-    bullets.push({ mesh: m, x, y: 0.8, z: bz, vz, vx });
+    bullets.push({ mesh: m, x, y: by, z: bz, vz: bvz, vy: bvy, vx });
   };
   if (tripleTimer > 0) {
-    [[-0.55,-0.55,-0.015],[0,-0.55,0],[0.55,-0.55,0.015]].forEach(([dx,vz,vx]) => make(playerX+dx, vz, vx));
+    [[-0.55,-0.015],[0,0],[0.55,0.015]].forEach(([dx, vx]) => make(playerX+dx, vx));
   } else {
-    make(playerX, -0.55, 0);
+    make(playerX, 0);
   }
   beep(tripleTimer > 0 ? 700 : 900, 0.07);
 }
@@ -570,8 +638,8 @@ function update(){
 
   // Move bullets
   for(let i=bullets.length-1;i>=0;i--){
-    const b=bullets[i]; b.z+=b.vz; b.x+=b.vx;
-    b.mesh.position.z=b.z; b.mesh.position.x=b.x;
+    const b=bullets[i]; b.z+=b.vz; b.x+=b.vx; b.y+=b.vy;
+    b.mesh.position.z=b.z; b.mesh.position.x=b.x; b.mesh.position.y=b.y;
     if(b.z<-17){scene.remove(b.mesh);bullets.splice(i,1);}
   }
   for(let i=eBullets.length-1;i>=0;i--){
@@ -657,7 +725,7 @@ function checkCollisions(){
     const b=bullets[bi];
     for(const inv of grid){
       if(!inv.alive)continue;
-      if(dXZ(b,inv)<0.92&&Math.abs(b.y-inv.y)<0.9){
+      if(dXZ(b,inv)<0.92&&Math.abs(b.y-inv.y)<3.0){
         inv.alive=false;inv.mesh.visible=false;
         scene.remove(b.mesh);bullets.splice(bi,1);
         const p=(inv.type==='A'?30:inv.type==='B'?20:10)*mult();
