@@ -4,20 +4,40 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#050510">
-  <title>Legacy Invader</title>
+  <title>Legacy Invader 3D</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js"}}</script>
 </head>
 <body>
   <div id="game-wrap">
     <canvas id="canvas"></canvas>
+
+    <div id="hud">
+      <div id="hud-score">000000</div>
+      <div id="hud-lives">♥♥♥</div>
+      <div id="hud-hi">HI 000000</div>
+      <div id="hud-level">LV1</div>
+      <div id="hud-pu"></div>
+    </div>
+
+    <div id="overlay">
+      <div id="overlay-title">LEGACY<br>INVADER</div>
+      <div id="overlay-sub"></div>
+      <div id="overlay-hint">TAP TO START</div>
+    </div>
+
+    <div id="trans-overlay">
+      <div id="trans-msg"></div>
+    </div>
+
     <div id="controls">
       <button id="btn-shoot" class="fire-btn">FIRE</button>
       <button id="btn-mute" class="icon-btn" aria-label="BGM">🔇</button>
     </div>
   </div>
-  <script src="game.js"></script>
+  <script type="module" src="game.js"></script>
 </body>
 </html>
