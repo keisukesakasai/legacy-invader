@@ -27,20 +27,46 @@ resize();
 
 // ── Time of Day ───────────────────────────────────────────────────────────
 let timeOfDay = 0.40;        // 0=midnight, 0.5=noon, 1=midnight
-const TIME_SPEED = 0.000018; // full cycle ~15 min real time
+const TIME_SPEED = 0.000055; // full cycle ~3 min real time
+
+// ── Weather system ────────────────────────────────────────────────────────
+// States: 'clear', 'cloudy', 'rain', 'fog', 'storm'
+const WEATHER_STATES = ['clear', 'clear', 'cloudy', 'rain', 'fog', 'storm'];
+let weatherState     = 'clear';
+let weatherTarget    = 'clear';
+let weatherIntensity = 0.0;   // 0→1 transition progress
+let weatherTimer     = 0;     // frames until next change
+const WEATHER_DURATIONS = { clear: 1800, cloudy: 1200, rain: 900, fog: 1000, storm: 600 };
+function nextWeather() {
+  const options = WEATHER_STATES.filter(w => w !== weatherState);
+  weatherTarget = options[Math.floor(Math.random() * options.length)];
+  weatherTimer  = WEATHER_DURATIONS[weatherTarget] + Math.floor(Math.random() * 400);
+}
+nextWeather();
 
 // Keyframes: t, zenith, midSky, horizon, ground, ambInt, ambColor, sunInt, sunColor, fogColor, fogDensity
 const PHASES = [
-  { t:0.00, zen:0x01010f, mid:0x020318, hor:0x04081e, gnd:0x010108, aI:0.25, aC:0x0a1022, sI:0.0,  sC:0x4060c0, fog:0x02030f, fd:0.003 },
-  { t:0.22, zen:0x08061e, mid:0x0f0820, hor:0x1e0610, gnd:0x030208, aI:0.35, aC:0x18101e, sI:0.05, sC:0x503010, fog:0x060510, fd:0.004 },
-  { t:0.26, zen:0x200e2e, mid:0x3e1a28, hor:0xc85020, gnd:0x0a060e, aI:0.65, aC:0x402018, sI:1.0,  sC:0xff7030, fog:0x963020, fd:0.007 },
-  { t:0.32, zen:0x2858b0, mid:0x4880c0, hor:0xc0a058, gnd:0x182018, aI:1.1,  aC:0x8a6840, sI:2.2,  sC:0xffd080, fog:0x9a8060, fd:0.005 },
+  // Midnight — deep indigo, soft navy fog, visible but dim
+  { t:0.00, zen:0x06081a, mid:0x080d22, hor:0x0e1530, gnd:0x04060e, aI:0.55, aC:0x182840, sI:0.0,  sC:0x6080c0, fog:0x08101e, fd:0.003 },
+  // Pre-dawn — dark slate lavender
+  { t:0.22, zen:0x0d0c28, mid:0x160e30, hor:0x2a1040, gnd:0x070510, aI:0.60, aC:0x201838, sI:0.05, sC:0x8060a0, fog:0x120c22, fd:0.004 },
+  // Sunrise — soft peach & lavender horizon, pastel orange sun
+  { t:0.26, zen:0x2a2050, mid:0x5040a0, hor:0xf0b090, gnd:0x140a10, aI:0.80, aC:0x806050, sI:1.0,  sC:0xffb870, fog:0xd09070, fd:0.006 },
+  // Morning — warm gold wash
+  { t:0.32, zen:0x2858b0, mid:0x4880c0, hor:0xd0b878, gnd:0x182018, aI:1.1,  aC:0x8a7850, sI:2.2,  sC:0xffd898, fog:0xa09068, fd:0.005 },
+  // Noon — clear blue
   { t:0.50, zen:0x155aab, mid:0x3382cc, hor:0x88c4f0, gnd:0x204030, aI:1.4,  aC:0x7a9090, sI:3.5,  sC:0xfff8f0, fog:0x88c0e0, fd:0.004 },
+  // Afternoon — slightly warmer
   { t:0.67, zen:0x143898, mid:0x2e68c0, hor:0x78a8d8, gnd:0x203028, aI:1.3,  aC:0x6880a0, sI:3.0,  sC:0xffe898, fog:0x6890c0, fd:0.004 },
-  { t:0.75, zen:0x08051e, mid:0x1c0610, hor:0xe84010, gnd:0x0e0404, aI:0.8,  aC:0x681808, sI:2.2,  sC:0xff5800, fog:0xb02808, fd:0.006 },
-  { t:0.83, zen:0x040310, mid:0x080518, hor:0x2e0618, gnd:0x030206, aI:0.45, aC:0x200810, sI:0.3,  sC:0x703018, fog:0x140508, fd:0.005 },
-  { t:0.92, zen:0x01010f, mid:0x020218, hor:0x04081e, gnd:0x010108, aI:0.25, aC:0x0a1022, sI:0.0,  sC:0x4060c0, fog:0x02030f, fd:0.003 },
-  { t:1.00, zen:0x01010f, mid:0x020318, hor:0x04081e, gnd:0x010108, aI:0.25, aC:0x0a1022, sI:0.0,  sC:0x4060c0, fog:0x02030f, fd:0.003 },
+  // Sunset — romantic pastel: apricot, rose, soft lavender zenith
+  { t:0.74, zen:0x2a1848, mid:0x7040a0, hor:0xffb890, gnd:0x0e0810, aI:1.0,  aC:0xa07060, sI:2.0,  sC:0xffb870, fog:0xe08868, fd:0.006 },
+  // Deep sunset — mauve & dusty rose
+  { t:0.78, zen:0x180e30, mid:0x3a2060, hor:0xff9060, gnd:0x080408, aI:0.75, aC:0x704848, sI:1.2,  sC:0xffaa80, fog:0xc07050, fd:0.007 },
+  // Dusk — indigo with warm afterglow at horizon
+  { t:0.83, zen:0x080a20, mid:0x101530, hor:0x603050, gnd:0x040408, aI:0.60, aC:0x302040, sI:0.2,  sC:0x9060a0, fog:0x302040, fd:0.005 },
+  // Night — back to midnight
+  { t:0.92, zen:0x06081a, mid:0x080d22, hor:0x0e1530, gnd:0x04060e, aI:0.55, aC:0x182840, sI:0.0,  sC:0x6080c0, fog:0x08101e, fd:0.003 },
+  { t:1.00, zen:0x06081a, mid:0x080d22, hor:0x0e1530, gnd:0x04060e, aI:0.55, aC:0x182840, sI:0.0,  sC:0x6080c0, fog:0x08101e, fd:0.003 },
 ];
 
 function skyAt(t) {
@@ -96,7 +122,7 @@ scene.add(ambLight);
 const sunLight  = new THREE.DirectionalLight(0xfff8f0, 3.5);
 sunLight.position.set(30, 80, -100);
 scene.add(sunLight);
-const moonLight = new THREE.DirectionalLight(0x4460a0, 0.0);
+const moonLight = new THREE.DirectionalLight(0x8aaae8, 0.0);
 moonLight.position.set(-30, 60, -100);
 scene.add(moonLight);
 const playerGlow = new THREE.PointLight(0x4fc3f7, 8, 14);
@@ -122,15 +148,21 @@ scene.add(sunObj);
 
 // ── Moon ──────────────────────────────────────────────────────────────────
 const moonMesh = new THREE.Mesh(
-  new THREE.SphereGeometry(5, 16, 10),
-  new THREE.MeshBasicMaterial({ color: 0xdde8f8 })
+  new THREE.SphereGeometry(7, 20, 14),
+  new THREE.MeshBasicMaterial({ color: 0xeef4ff })
 );
+// Moon glow halo
+const moonGlow = new THREE.Mesh(
+  new THREE.SphereGeometry(12, 16, 10),
+  new THREE.MeshBasicMaterial({ color: 0xaabfe8, transparent: true, opacity: 0.10 })
+);
+moonMesh.add(moonGlow);
 moonMesh.position.set(80, 60, -220);
 scene.add(moonMesh);
 
 // ── Stars ─────────────────────────────────────────────────────────────────
 const starMesh = (() => {
-  const N = 1400;
+  const N = 2200;
   const pos = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {
     const theta = Math.random() * Math.PI * 2;
@@ -143,7 +175,7 @@ const starMesh = (() => {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   const m = new THREE.Points(geo,
-    new THREE.PointsMaterial({ color: 0xffffff, size: 0.55, sizeAttenuation: true, transparent: true, opacity: 0.0 })
+    new THREE.PointsMaterial({ color: 0xddeeff, size: 0.65, sizeAttenuation: true, transparent: true, opacity: 0.0 })
   );
   scene.add(m);
   return m;
@@ -193,6 +225,24 @@ function makeCloud(x, y, z, sc, windSpd) {
   makeCloud( 40, 43, -260, rnd(8,13),  0.006);
 }
 
+// ── Rain particles ────────────────────────────────────────────────────────
+let rainMesh, rainGeo;
+{
+  const COUNT = 2000;
+  const pos = new Float32Array(COUNT * 3);
+  for (let i = 0; i < COUNT; i++) {
+    pos[i*3]   = (Math.random() - 0.5) * 260;
+    pos[i*3+1] = Math.random() * 80 + 5;
+    pos[i*3+2] = (Math.random() - 0.5) * 200 - 80;
+  }
+  rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  rainMesh = new THREE.Points(rainGeo, new THREE.PointsMaterial({
+    color: 0x99bbdd, size: 0.25, transparent: true, opacity: 0.0, depthWrite: false
+  }));
+  scene.add(rainMesh);
+}
+
 // ── Night material registries ─────────────────────────────────────────────
 const nightEmissiveMats = []; // MeshStandardMaterial: emissiveIntensity changes with night
 const nightWindowMats   = []; // MeshBasicMaterial transparent windows: opacity changes
@@ -226,41 +276,167 @@ let waterMesh, waterMat;
 // ── Building skyline ──────────────────────────────────────────────────────
 {
   const rnd = (a, b) => a + Math.random() * (b - a);
+  const rndInt = (a, b) => Math.floor(rnd(a, b + 1));
 
+  // Facade styles: 0=glass curtain wall, 1=concrete grid, 2=dark mirror glass, 3=striped
   function addBuilding(x, z, w, d, h) {
+    const style = rndInt(0, 3);
     const isTall = h > 35;
+    const isTower = h > 50;
+
+    // ── Facade color by style ──────────────────────────────────────────────
+    const facadeColor = [
+      new THREE.Color().setHSL(0.58, 0.22, 0.42 + Math.random()*0.10), // glass blue-grey
+      new THREE.Color().setHSL(0.08, 0.06, 0.52 + Math.random()*0.10), // concrete beige
+      new THREE.Color().setHSL(0.60, 0.18, 0.18 + Math.random()*0.08), // dark mirror
+      new THREE.Color().setHSL(0.55, 0.12, 0.38 + Math.random()*0.10), // slate grey
+    ][style];
+
+    const metalness = [0.55, 0.12, 0.80, 0.35][style];
+    const roughness  = [0.20, 0.75, 0.05, 0.55][style];
+
     const bodyMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(0.55 + Math.random()*0.06, 0.08, 0.50 + Math.random()*0.12),
-      roughness: 0.55, metalness: isTall ? 0.42 : 0.18,
-      emissive: new THREE.Color(0.15, 0.10, 0.04), emissiveIntensity: 0.0,
+      color: facadeColor, roughness, metalness,
+      emissive: new THREE.Color(0.08, 0.06, 0.02), emissiveIntensity: 0.0,
     });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat);
-    body.position.set(x, h/2 - 1.0, z);
-    scene.add(body);
     nightEmissiveMats.push(bodyMat);
 
-    // Window rows (become visible at night)
-    const winRows = Math.max(2, Math.floor(h / 3.5));
-    const winW = w * 0.72, winH = (h / winRows) * 0.38;
-    for (let wr = 0; wr < winRows; wr++) {
-      if (Math.random() < 0.25) continue;
-      const wMat = new THREE.MeshBasicMaterial({
-        color: Math.random() < 0.10 ? 0x88ccff : 0xffee88,
-        transparent: true, opacity: 0.0,
-      });
-      const win = new THREE.Mesh(new THREE.PlaneGeometry(winW, winH), wMat);
-      win.position.set(x, h/2 - 1.0 - h/2 + (wr+0.5)*(h/winRows), z - d/2 - 0.02);
-      scene.add(win);
-      nightWindowMats.push(wMat);
+    // ── Base podium (wider, shorter block at bottom) ───────────────────────
+    const podH = Math.min(h * 0.18, 6);
+    const podMat = new THREE.MeshStandardMaterial({
+      color: facadeColor.clone().multiplyScalar(0.82),
+      roughness: roughness + 0.15, metalness: metalness * 0.6,
+    });
+    const pod = new THREE.Mesh(new THREE.BoxGeometry(w * 1.12, podH, d * 1.12), podMat);
+    pod.position.set(x, podH / 2 - 1.0, z);
+    scene.add(pod);
+
+    // ── Main tower body ────────────────────────────────────────────────────
+    // Taller towers get a setback: lower 60% full width, upper 40% slightly narrower
+    if (isTall) {
+      const lowerH = h * 0.62, upperH = h * 0.38;
+      const lw = w, ld = d;
+      const uw = w * (0.78 + Math.random() * 0.12), ud = d * (0.78 + Math.random() * 0.12);
+
+      const lower = new THREE.Mesh(new THREE.BoxGeometry(lw, lowerH, ld), bodyMat);
+      lower.position.set(x, podH + lowerH / 2 - 1.0, z);
+      scene.add(lower);
+
+      const upper = new THREE.Mesh(new THREE.BoxGeometry(uw, upperH, ud), bodyMat.clone());
+      upper.position.set(x, podH + lowerH + upperH / 2 - 1.0, z);
+      scene.add(upper);
+      nightEmissiveMats.push(upper.material);
+
+      // Setback ledge
+      const ledgeMat = new THREE.MeshStandardMaterial({ color: 0x888898, roughness: 0.6, metalness: 0.4 });
+      const ledge = new THREE.Mesh(new THREE.BoxGeometry(lw + 0.3, 0.4, ld + 0.3), ledgeMat);
+      ledge.position.set(x, podH + lowerH - 1.0, z);
+      scene.add(ledge);
+
+      // Very tall: second setback
+      if (isTower && Math.random() > 0.4) {
+        const t2H = upperH * 0.5;
+        const t2w = uw * 0.70, t2d = ud * 0.70;
+        const top2 = new THREE.Mesh(new THREE.BoxGeometry(t2w, t2H, t2d), bodyMat.clone());
+        top2.position.set(x, podH + lowerH + upperH + t2H / 2 - 1.0, z);
+        scene.add(top2);
+        nightEmissiveMats.push(top2.material);
+        const l2 = new THREE.Mesh(new THREE.BoxGeometry(uw + 0.2, 0.3, ud + 0.2), ledgeMat);
+        l2.position.set(x, podH + lowerH + upperH - 1.0, z);
+        scene.add(l2);
+      }
+    } else {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat);
+      body.position.set(x, podH + h / 2 - 1.0, z);
+      scene.add(body);
     }
 
-    if (isTall && Math.random() > 0.4) {
+    // ── Horizontal floor bands (concrete grid style) ───────────────────────
+    if (style === 1 || style === 3) {
+      const bandMat = new THREE.MeshStandardMaterial({
+        color: facadeColor.clone().multiplyScalar(0.70), roughness: 0.85, metalness: 0.05
+      });
+      const floors = Math.floor(h / 4);
+      for (let f = 1; f < floors; f++) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 0.18, d + 0.1), bandMat);
+        band.position.set(x, podH + (f / floors) * h - 1.0, z);
+        scene.add(band);
+      }
+    }
+
+    // ── Individual windows (grid pattern) ─────────────────────────────────
+    const winCols = Math.max(2, Math.round(w / 1.6));
+    const winRows = Math.max(3, Math.round(h / 2.8));
+    const winW = (w / winCols) * 0.58, winH2 = (h / winRows) * 0.55;
+    const colSpacing = w / winCols, rowSpacing = h / winRows;
+
+    for (let row = 0; row < winRows; row++) {
+      if (Math.random() < 0.08) continue; // skip a whole row occasionally
+      for (let col = 0; col < winCols; col++) {
+        if (Math.random() < 0.15) continue; // some windows dark
+        const isBlue = Math.random() < 0.18;
+        const wMat = new THREE.MeshBasicMaterial({
+          color: isBlue ? 0x99ccff : (Math.random() < 0.3 ? 0xffdd99 : 0xffee77),
+          transparent: true, opacity: 0.0,
+        });
+        const wx = x - w / 2 + (col + 0.5) * colSpacing;
+        const wy = podH - 1.0 + (row + 0.5) * rowSpacing + rowSpacing * 0.5;
+        const win = new THREE.Mesh(new THREE.PlaneGeometry(winW, winH2), wMat);
+        win.position.set(wx, wy, z - d / 2 - 0.05);
+        scene.add(win);
+        nightWindowMats.push(wMat);
+      }
+    }
+
+    // ── Rooftop details ───────────────────────────────────────────────────
+    const roofY = (isTall ? (h * 0.62 + h * 0.38) : h) + podH - 1.0;
+
+    // Parapet
+    const parapetMat = new THREE.MeshStandardMaterial({ color: 0x909098, roughness: 0.65, metalness: 0.3 });
+    const parapet = new THREE.Mesh(new THREE.BoxGeometry(w + 0.15, 0.5, d + 0.15), parapetMat);
+    parapet.position.set(x, roofY + 0.25, z);
+    scene.add(parapet);
+
+    // Mechanical penthouse
+    if (isTall && Math.random() > 0.3) {
+      const phW = w * rnd(0.30, 0.55), phD = d * rnd(0.35, 0.60), phH = rnd(2.0, 4.5);
+      const phMat = new THREE.MeshStandardMaterial({
+        color: facadeColor.clone().multiplyScalar(0.88), roughness: 0.6, metalness: 0.3
+      });
+      const ph = new THREE.Mesh(new THREE.BoxGeometry(phW, phH, phD), phMat);
+      ph.position.set(x + rnd(-w*0.1, w*0.1), roofY + phH / 2 + 0.5, z);
+      scene.add(ph);
+    }
+
+    // Antenna / spire on tall towers
+    if (isTall) {
+      const antH = isTower ? h * 0.14 : h * 0.08;
       const ant = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.04, 0.09, h*0.09, 6),
-        new THREE.MeshStandardMaterial({ color: 0x888890 })
+        new THREE.CylinderGeometry(0.03, 0.10, antH, 6),
+        new THREE.MeshStandardMaterial({ color: 0x999aaa, roughness: 0.4, metalness: 0.7 })
       );
-      ant.position.set(x, h - 1.0 + h*0.045, z);
+      ant.position.set(x, roofY + antH / 2 + 0.5, z);
       scene.add(ant);
+      // Red warning light
+      const warnMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
+      const warn = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), warnMat);
+      warn.position.set(x, roofY + antH + 0.7, z);
+      scene.add(warn);
+      nightWindowMats.push(new THREE.MeshBasicMaterial({ color: 0xff2200, transparent: true, opacity: 0.0 }));
+    }
+
+    // Helipad on ultra-tall towers
+    if (isTower && Math.random() > 0.55) {
+      const hpMat = new THREE.MeshStandardMaterial({ color: 0x445566, roughness: 0.8 });
+      const hp = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.38, w * 0.38, 0.22, 12), hpMat);
+      hp.position.set(x, roofY + 0.55, z);
+      scene.add(hp);
+      // H marking
+      const hMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const hBar = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.5, 0.25), hMat);
+      hBar.rotation.x = -Math.PI / 2;
+      hBar.position.set(x, roofY + 0.67, z);
+      scene.add(hBar);
     }
   }
 
@@ -276,7 +452,7 @@ let waterMesh, waterMat;
     addBuilding(x, rnd(-60,-85), rnd(4,13), rnd(5,10), rnd(22,68));
   }
 
-  // Construction cranes (visible in photo)
+  // Construction cranes
   function addCrane(x, z) {
     const cMat = new THREE.MeshStandardMaterial({ color: 0xcc3300, roughness: 0.7 });
     const g = new THREE.Group();
@@ -473,16 +649,70 @@ const elPU       = document.getElementById('hud-pu');
 const hudEl      = document.getElementById('hud');
 const legendEl   = document.getElementById('item-legend');
 
+// ── Item inventory ────────────────────────────────────────────────────────
+// Counts persist across waves; life is instant so not stored
+const inv = { rapid: 0, triple: 0, bomb: 0 };
+
+// Per-stack effects:
+//   rapid:  ×1→ 3shot cd5  ×2→ 5shot cd3  ×3→ 7shot cd2
+//   triple: ×1→ 3-way      ×2→ 5-way       ×3→ 7-way
+//   bomb:   ×1→ front row  ×2→ front 2rows  ×3→ all enemies
+const PU_SLOT_ICONS  = { rapid: '⚡', triple: '≡', life: '♥', bomb: '✸' };
+const PU_BAR_COLORS  = { rapid: '#ffcc00', triple: '#00e5ff', life: '#ff4d8b', bomb: '#bf5fff' };
+// Legend descriptions (left panel)
+const PU_DESC = {
+  rapid:  ['連射UP', '超連射', '超超連射', '弾幕', '神連射'],
+  triple: ['3方向弾', '5方向弾', '7方向弾', '9方向弾', '11方向弾'],
+  life:   ['HP回復', '', '', '', ''],
+  bomb:   ['前列爆破', '前2列爆破', '全滅爆破', '前列爆破', '前列爆破'],
+};
+let puSlotEls = {};
+
+function buildPUSlots() {
+  elPU.innerHTML = '';
+  puSlotEls = {};
+  for (const type of ['rapid', 'triple', 'bomb']) {
+    const slot = document.createElement('div');
+    slot.className = 'pu-slot';
+    slot.style.display = 'none';
+    slot.innerHTML =
+      `<span class="pu-icon">${PU_SLOT_ICONS[type]}</span>` +
+      `<span class="pu-count"></span>` +
+      `<div class="pu-pips"></div>`;
+    elPU.appendChild(slot);
+    puSlotEls[type] = { slot, count: slot.querySelector('.pu-count'), pips: slot.querySelector('.pu-pips') };
+  }
+}
+
 function updateHUD() {
   elScore.textContent = String(score).padStart(6, '0');
   elHi.textContent    = 'HI ' + String(hiscore).padStart(6, '0');
   elLives.textContent = '♥'.repeat(Math.max(0, lives));
   elLevel.textContent = `LV${level}`;
-  const parts = [];
-  if (rapidTimer  > 0) parts.push(`⚡ ${Math.ceil(rapidTimer/60)}s`);
-  if (tripleTimer > 0) parts.push(`≡ ${Math.ceil(tripleTimer/60)}s`);
-  if (streak >= 3)     parts.push(`${streak}x COMBO`);
-  elPU.textContent = parts.join('  ');
+  for (const type of ['rapid', 'triple', 'bomb']) {
+    const n = inv[type];
+    const el = puSlotEls[type];
+    if (!el) continue;
+    if (n > 0) {
+      el.slot.style.display = 'flex';
+      el.count.textContent  = `×${n}`;
+      el.count.style.color  = PU_BAR_COLORS[type];
+      // pip dots: up to 3, filled = current count
+      el.pips.innerHTML = [1,2,3,4,5].map(i =>
+        `<span class="pip${i<=n?' pip-on':''}" style="${i<=n?`background:${PU_BAR_COLORS[type]};box-shadow:0 0 5px ${PU_BAR_COLORS[type]}`:''}""></span>`
+      ).join('');
+    } else {
+      el.slot.style.display = 'none';
+    }
+  }
+  // Update left legend counts + desc
+  for (const type of ['rapid','triple','bomb']) {
+    const cntEl  = document.getElementById(`legend-count-${type}`);
+    const dscEl  = document.getElementById(`legend-desc-${type}`);
+    const n = inv[type];
+    if (cntEl) cntEl.textContent = n > 0 ? `×${n}` : '';
+    if (dscEl) dscEl.textContent = PU_DESC[type][Math.min(2, Math.max(0, n - 1))] || PU_DESC[type][0];
+  }
 }
 function saveHi() {
   if (score > hiscore) { hiscore = score; localStorage.setItem('legacyInvaderHi', hiscore); }
@@ -516,16 +746,21 @@ function updateTransition() {
   transMsg.textContent  = transAlpha > 0.55 ? transText : '';
 }
 
-// ── Flash effect ──────────────────────────────────────────────────────────
-const flashEl = document.getElementById('flash');
-let flashTimer = 0;
-function triggerFlash(color, strength) {
-  if (!flashEl) return;
-  flashEl.style.transition = 'none';
-  flashEl.style.background = color || '#ffffff';
-  flashEl.style.opacity    = strength || 0.3;
-  flashTimer = 2;
+// ── Hit effects (no screen flash) ────────────────────────────────────────
+const sweepEl = document.getElementById('sweep');
+let vigTimer = 0;
+
+function triggerFovPulse(amount) {
+  fovTarget = Math.max(50, 62 - amount);
 }
+function triggerSweep() {
+  if (!sweepEl) return;
+  sweepEl.classList.remove('running');
+  void sweepEl.offsetWidth;
+  sweepEl.classList.add('running');
+}
+function triggerVignette(_color, _strength) { /* removed — no more flashing */ }
+function triggerFlash(_color, _strength)    { /* removed — no more flashing */ }
 
 // ── Materials ─────────────────────────────────────────────────────────────
 const C  = { A: 0xff6b6b, B: 0xffd93d, C: 0x6bcb77 };
@@ -607,29 +842,38 @@ let aimTarget = null;
 // ── Game state ────────────────────────────────────────────────────────────
 let state = 'title', score = 0, lives = 3, level = 1, frame = 0;
 let waveCleared = false, playerX = 0, playerY = 0.5, playerVX = 0;
-let rapidTimer = 0, tripleTimer = 0, shootCooldown = 0;
+let shootCooldown = 0;
 let streak = 0, streakTimer = 0;
 let shakeTimer = 0, shakeAmt = 0;
 
-const PLAYER_LIMIT  = 10,  PLAYER_SPEED  = 0.18, PLAYER_Z = 12;
+let   PLAYER_LIMIT  = 10; // updated dynamically in initGrid
+const PLAYER_SPEED  = 0.18, PLAYER_Z = 12;
 const PLAYER_Y_MIN  = 0.3, PLAYER_Y_MAX  = 5.5,  PLAYER_Y_SPEED = 0.13;
-const ROWS = 5, COLS = 11;
+// Grid size grows with level (set in initGrid)
+let gridRows = 5, gridCols = 11;
+let invBoundX = 9.5; // turn-around X, updated in initGrid
 
 // ── Grid ──────────────────────────────────────────────────────────────────
-let grid = [], invDir = 1, invStepX = 0.14, invAdvZ = 0.55;
-let invTick = 38, invTimer = 38;
+let grid = [], invDir = 1, invStepX = 0.10, invAdvZ = 0.32;
+let invTick = 52, invTimer = 52;
 
 function initGrid() {
   grid.forEach(inv => scene.remove(inv.mesh));
   grid = [];
   dying.forEach(d => scene.remove(d.mesh)); dying = [];
-  const cellW = 20 / COLS, cellH = 1.5;
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
+
+  // Grow grid each level: +1 col every 2 levels (max 23), +1 row every 3 levels (max 12)
+  gridCols = Math.min(23, 11 + Math.floor((level - 1) / 2));
+  gridRows = Math.min(12,  5 + Math.floor((level - 1) / 3));
+
+  const totalW = gridCols * 1.82;
+  const cellW = totalW / gridCols, cellH = 1.5;
+  for (let r = 0; r < gridRows; r++) {
+    for (let c = 0; c < gridCols; c++) {
       const type = r === 0 ? 'A' : r < 3 ? 'B' : 'C';
       const mesh = makeInvader(type);
-      const x = (c - (COLS-1)/2) * cellW;
-      const y = 1.5 + (ROWS-1-r) * cellH;
+      const x = (c - (gridCols-1)/2) * cellW;
+      const y = 1.5 + (gridRows-1-r) * cellH;
       const z = -12;
       mesh.position.set(x, y, z);
       scene.add(mesh);
@@ -637,13 +881,23 @@ function initGrid() {
     }
   }
   invDir = 1;
-  invStepX = 0.13 + (level-1) * 0.015;
-  invAdvZ  = 0.5  + (level-1) * 0.08;
-  invTick  = Math.max(10, 38 - (level-1) * 3);
+  invStepX = 0.09;   // speed fixed regardless of level
+  invAdvZ  = 0.28;
+  invTick  = 52;
   invTimer = invTick;
   waveCleared = false;
   eBullets.forEach(b => scene.remove(b.mesh)); eBullets = [];
-  eShootTimer = Math.max(40, 100 - level * 8);
+  eShootTimer = 80;
+
+  // Camera pulls back as grid grows
+  const extraRows = gridRows - 5, extraCols = gridCols - 11;
+  fovTarget = 62 + extraCols * 1.2 + extraRows * 1.0;
+  camera.position.y = 16 + extraRows * 1.8 + extraCols * 0.8;
+
+  // Sync enemy turn-around and player limit to grid half-width + margin
+  const halfGrid = (totalW / 2) + 1.5;
+  invBoundX   = halfGrid;
+  PLAYER_LIMIT = halfGrid + 1.0;
 }
 
 // ── Barriers ──────────────────────────────────────────────────────────────
@@ -670,7 +924,9 @@ const PU_COL   = { rapid: 0xffcc00, triple: 0x00e5ff, life: 0xff4d8b, bomb: 0xbf
 const PU_CHX   = { rapid: '#ffcc00', triple: '#00e5ff', life: '#ff4d8b', bomb: '#bf5fff' };
 
 function spawnBullets() {
-  const bcolor = tripleTimer > 0 ? 0x00e5ff : rapidTimer > 0 ? 0xffcc00 : 0xffffff;
+  const hasTriple = inv.triple > 0;
+  const hasRapid  = inv.rapid  > 0;
+  const bcolor = hasTriple ? 0x00e5ff : hasRapid ? 0xffcc00 : 0xffffff;
   const mat = new THREE.MeshBasicMaterial({ color: bcolor });
   const bz = playerMesh.position.z - 1.2;
   const by = playerMesh.position.y + 0.3;
@@ -685,19 +941,26 @@ function spawnBullets() {
     scene.add(m);
     bullets.push({ mesh: m, x, y: by, z: bz, vz: bvz, vy: bvy, vx });
   };
-  if (tripleTimer > 0) {
-    [[-0.55,-0.015],[0,0],[0.55,0.015]].forEach(([dx, vx]) => make(playerX+dx, vx));
+  // triple: ×1=3way ×2=5way ×3=7way ×4=9way ×5=11way
+  const ways = hasTriple ? [3,5,7,9,11][Math.min(4, inv.triple - 1)] : 1;
+  if (ways > 1) {
+    const spread = 0.55;
+    const half = (ways - 1) / 2;
+    for (let i = 0; i < ways; i++) {
+      const offset = (i - half) * spread;
+      make(playerX + offset, offset * 0.015);
+    }
   } else {
     make(playerX, 0);
   }
-  beep(tripleTimer > 0 ? 700 : 900, 0.07);
+  beep(hasTriple ? 700 : 900, 0.07);
 }
 
 function spawnEBullet(inv) {
   const m = new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 4), new THREE.MeshBasicMaterial({ color: 0xff3300 }));
   m.position.set(inv.x, inv.y, inv.z + 0.5);
   scene.add(m);
-  eBullets.push({ mesh: m, x: inv.x, y: inv.y, z: inv.z+0.5, vz: 0.28+(level-1)*0.03 });
+  eBullets.push({ mesh: m, x: inv.x, y: inv.y, z: inv.z+0.5, vz: 0.20 });
   beep(160, 0.13, 'sawtooth', 0.05);
 }
 
@@ -746,36 +1009,100 @@ function updateParticles() {
 
 // ── Power-ups ─────────────────────────────────────────────────────────────
 let powerUps = [];
+let rings = [];
+
+function makePUMesh(type) {
+  const col = PU_COL[type];
+  const mat = new THREE.MeshStandardMaterial({
+    color: col, emissive: col, emissiveIntensity: 2.5,
+    transparent: true, opacity: 0.95,
+  });
+  let geo;
+  if (type === 'rapid') {
+    geo = new THREE.OctahedronGeometry(0.55);
+  } else if (type === 'triple') {
+    geo = new THREE.TorusGeometry(0.45, 0.15, 8, 16);
+  } else if (type === 'bomb') {
+    geo = new THREE.IcosahedronGeometry(0.55);
+  } else {
+    // life — heart-style group: main sphere + 2 small spheres
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), mat));
+    const s1 = new THREE.Mesh(new THREE.SphereGeometry(0.28, 6, 4), mat.clone());
+    s1.position.set(-0.3, 0.35, 0); g.add(s1);
+    const s2 = new THREE.Mesh(new THREE.SphereGeometry(0.28, 6, 4), mat.clone());
+    s2.position.set(0.3, 0.35, 0); g.add(s2);
+    return g;
+  }
+  return new THREE.Mesh(geo, mat);
+}
+
+function spawnRing(x, y, z, color) {
+  const mat = new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.8, side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 24), mat);
+  mesh.position.set(x, y, z);
+  mesh.rotation.x = -Math.PI / 2;
+  scene.add(mesh);
+  rings.push({ mesh, mat, life: 1.0 });
+}
+
+function updateRings() {
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const r = rings[i];
+    r.life -= 0.032;
+    const s = 1 + (1 - r.life) * 6;
+    r.mesh.scale.setScalar(s);
+    r.mat.opacity = Math.max(0, r.life * 0.8);
+    if (r.life <= 0) { scene.remove(r.mesh); rings.splice(i, 1); }
+  }
+}
+
 function maybeDrop(x, y, z) {
   if (Math.random() > 0.18) return;
   const type = PU_TYPES[Math.floor(Math.random()*4)];
-  const m = new THREE.Mesh(
-    new THREE.SphereGeometry(0.55, 12, 10),
-    new THREE.MeshStandardMaterial({ color: PU_COL[type], emissive: PU_COL[type], emissiveIntensity: 3.0, transparent:true, opacity:0.95 })
-  );
+  const m = makePUMesh(type);
   m.position.set(x, y, z); scene.add(m);
-  powerUps.push({ mesh:m, type, x, y, z, vz:0.045 });
+  powerUps.push({ mesh:m, type, x, y, z, vz:0.045, age:0 });
   spawnFloat(x, y+1.2, z, {rapid:'⚡',triple:'≡',life:'♥',bomb:'✸'}[type], PU_CHX[type]);
+  spawnRing(x, y, z, PU_COL[type]);
 }
 
 function collectPU(type, x, y, z) {
   spawnExplosion(x, y, z, PU_COL[type], true);
   beep(660,0.06); beep(880,0.1); beep(1100,0.15);
-  spawnFloat(x, y+1.2, z, {rapid:'⚡RAPID',triple:'≡TRIPLE',life:'♥LIFE',bomb:'✸BOMB'}[type], PU_CHX[type]);
-  triggerFlash(PU_CHX[type], 0.3);
-  if      (type==='rapid')  { rapidTimer  = 60*8; }
-  else if (type==='triple') { tripleTimer = 60*8; }
-  else if (type==='life')   { lives=Math.min(5,lives+1); }
-  else if (type==='bomb') {
-    const alive=grid.filter(i=>i.alive).sort((a,b)=>b.row-a.row);
-    const maxR=alive.length?alive[0].row:0;
-    grid.forEach(inv=>{
-      if(!inv.alive||inv.row<maxR-1)return;
-      score+=(inv.type==='A'?30:inv.type==='B'?20:10)*mult();
-      spawnExplosion(inv.x,inv.y,inv.z, new THREE.Color(CH[inv.type]).getHex(), false);
-      killInvader(inv);
+  // Larger, faster float text on collect
+  const c2 = document.createElement('canvas'); c2.width = 256; c2.height = 64;
+  const cx2 = c2.getContext('2d');
+  cx2.fillStyle = PU_CHX[type]; cx2.font = 'bold 30px monospace';
+  cx2.textAlign = 'center'; cx2.textBaseline = 'middle';
+  cx2.fillText({rapid:'⚡RAPID',triple:'≡TRIPLE',life:'♥LIFE',bomb:'✸BOMB'}[type], 128, 32);
+  const tex = new THREE.CanvasTexture(c2);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.scale.set(2.8 * 1.5, 0.75 * 1.5, 1); sp.position.set(x, y + 1.2, z);
+  scene.add(sp); floats.push({ sp, mat: sp.material, life: 1.0, vy: 0.06 });
+  triggerFovPulse(8);
+  spawnRing(x, y, z, PU_COL[type]);
+  if (type === 'life') {
+    lives = Math.min(5, lives + 1);
+  } else if (type === 'bomb') {
+    // bomb: use immediately, power scales with count
+    const bombLv = inv.bomb + 1; // +1 = current pickup not yet counted
+    const alive  = grid.filter(i => i.alive).sort((a, b) => b.row - a.row);
+    const maxR   = alive.length ? alive[0].row : 0;
+    const rows   = bombLv >= 3 ? 999 : bombLv === 2 ? 2 : 1;
+    grid.forEach(gi => {
+      if (!gi.alive || gi.row < maxR - rows + 1) return;
+      score += (gi.type==='A'?30:gi.type==='B'?20:10) * mult();
+      spawnExplosion(gi.x, gi.y, gi.z, new THREE.Color(CH[gi.type]).getHex(), false);
+      killInvader(gi);
     });
-    triggerFlash('#ffffff', 0.65); saveHi(); shakeTimer=18; shakeAmt=0.25; beep(100,0.4,'sawtooth');
+    triggerSweep(); saveHi(); shakeTimer = 18; shakeAmt = 0.25; beep(100, 0.4, 'sawtooth');
+    // bomb doesn't stack into inventory — it fires immediately
+  } else {
+    // rapid / triple: stack up to 5
+    inv[type] = Math.min(5, inv[type] + 1);
   }
   updateHUD();
 }
@@ -783,27 +1110,193 @@ function collectPU(type, x, y, z) {
 // ── UFO ───────────────────────────────────────────────────────────────────
 const UFO_PTS=[50,100,150,200,300];
 let ufo=null, ufoTimer=1200+Math.floor(Math.random()*1200);
+
 function spawnUFO() {
-  const dir=Math.random()<0.5?1:-1;
-  const g=new THREE.Group();
-  const bMat=new THREE.MeshStandardMaterial({color:0xcc1144,emissive:0xff0044,emissiveIntensity:1.8});
-  const body=new THREE.Mesh(new THREE.SphereGeometry(0.9,16,8),bMat); body.scale.set(1,0.32,1); g.add(body);
-  const dome=new THREE.Mesh(new THREE.SphereGeometry(0.52,12,8),new THREE.MeshStandardMaterial({color:0xff5588,emissive:0xff2266,emissiveIntensity:1.5,transparent:true,opacity:0.8}));
-  dome.position.y=0.22; g.add(dome);
-  for(let i=0;i<6;i++){
-    const a=(i/6)*Math.PI*2;
-    const l=new THREE.Mesh(new THREE.SphereGeometry(0.1,6,4),new THREE.MeshBasicMaterial({color:i%2===0?0xffdd00:0xff6600}));
-    l.position.set(Math.cos(a)*0.8,-0.05,Math.sin(a)*0.8); g.add(l);
+  const dir = Math.random()<0.5 ? 1 : -1;
+  const g = new THREE.Group();
+
+  // Main saucer body — wider, layered
+  const bMat = new THREE.MeshStandardMaterial({color:0xcc1144,emissive:0xff0044,emissiveIntensity:2.2,metalness:0.7,roughness:0.2});
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1.2,24,10),bMat);
+  body.scale.set(1,0.28,1); g.add(body);
+
+  // Mid ring
+  const ringMat = new THREE.MeshStandardMaterial({color:0xff2266,emissive:0xff0055,emissiveIntensity:1.8,metalness:0.8,roughness:0.1});
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.1,0.18,8,24),ringMat);
+  ring.rotation.x=Math.PI/2; g.add(ring);
+
+  // Glass dome with glow
+  const domeMat = new THREE.MeshStandardMaterial({color:0xaaeeff,emissive:0x88ccff,emissiveIntensity:1.5,transparent:true,opacity:0.72,metalness:0.1,roughness:0.05});
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.68,16,10),domeMat);
+  dome.position.y=0.26; g.add(dome);
+
+  // Rotating light ring (8 orbs)
+  const lightRingGroup = new THREE.Group();
+  for(let i=0;i<8;i++){
+    const a=(i/8)*Math.PI*2;
+    const col = [0xff4400,0xffaa00,0x00ffcc,0xff00aa][i%4];
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.13,8,6),
+      new THREE.MeshBasicMaterial({color:col}));
+    orb.position.set(Math.cos(a)*1.05,0,Math.sin(a)*1.05);
+    lightRingGroup.add(orb);
   }
-  g.position.set(dir===1?-15:15, 5.5, -5); scene.add(g);
-  ufo={mesh:g, dir, x:dir===1?-15:15, y:5.5, z:-5, speed:0.12, pts:UFO_PTS[Math.floor(Math.random()*5)]};
-  beep(440,0.08,'sawtooth',0.03);
+  g.add(lightRingGroup);
+
+  // Bottom beam emitter
+  const beamMat = new THREE.MeshBasicMaterial({color:0x44ffcc,transparent:true,opacity:0.0});
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.5,2.5,12,1,true),beamMat);
+  beam.position.y=-1.3; g.add(beam);
+
+  // Entry: start high, descend into position
+  const startX = dir===1 ? -18 : 18;
+  g.position.set(startX, 14, -5); scene.add(g);
+
+  ufo = {
+    mesh:g, dir, x:startX, y:14, z:-5,
+    speed:0.14, pts:UFO_PTS[Math.floor(Math.random()*5)],
+    lightRing:lightRingGroup, beam, beamMat,
+    phase:'enter', enterT:0,  // 'enter'→'fly'
+    sineT: 0,
+  };
+  // Eerie entry sound: descending pitch sweep
+  beep(880,0.12,'sawtooth',0.04); beep(440,0.15,'sawtooth',0.06);
 }
+
 function updateUFO() {
-  if(!ufo){ if(--ufoTimer<=0){spawnUFO();ufoTimer=1200+Math.floor(Math.random()*1200);} return; }
-  ufo.x+=ufo.speed*ufo.dir; ufo.mesh.position.x=ufo.x; ufo.mesh.rotation.y+=0.05;
-  if(frame%40===0) beep(1000,0.05,'sine',0.02);
-  if((ufo.dir===1&&ufo.x>15)||(ufo.dir===-1&&ufo.x<-15)){scene.remove(ufo.mesh);ufo=null;}
+  if(!ufo){
+    if(--ufoTimer<=0){ spawnUFO(); ufoTimer=1400+Math.floor(Math.random()*1000); }
+    return;
+  }
+
+  ufo.lightRing.rotation.y += 0.08;
+  ufo.mesh.rotation.y += 0.04;
+  ufo.sineT += 0.04;
+
+  if(ufo.phase==='enter'){
+    ufo.enterT += 0.035;
+    const targetY = 5.5;
+    ufo.y += (targetY - ufo.y) * 0.06;
+    ufo.mesh.position.y = ufo.y;
+    // Pulsing beam during descent
+    ufo.beamMat.opacity = Math.sin(ufo.enterT*6)*0.15+0.05;
+    if(ufo.y < targetY+0.3){ ufo.phase='fly'; beep(660,0.06,'sine'); }
+  } else {
+    // Sine-wave flight path
+    ufo.x += ufo.speed * ufo.dir;
+    ufo.y  = 5.5 + Math.sin(ufo.sineT) * 1.2;
+    ufo.mesh.position.x = ufo.x;
+    ufo.mesh.position.y = ufo.y;
+    // Beam pulses on/off rhythmically
+    ufo.beamMat.opacity = Math.max(0, Math.sin(ufo.sineT*2)*0.4);
+    if(frame%35===0) beep(1100,0.04,'sine',0.02);
+    if((ufo.dir===1&&ufo.x>18)||(ufo.dir===-1&&ufo.x<-18)){
+      scene.remove(ufo.mesh); ufo=null;
+    }
+  }
+}
+
+// ── Wingmen (escort fighters earned by shooting UFOs) ─────────────────────
+// Types: 'scout'=fast single shot, 'gunship'=triple shot slow, 'drone'=orbits enemies
+const WINGMAN_TYPES = ['scout','gunship','drone','scout','gunship','drone','scout','gunship'];
+const wingmen = [];
+const WINGMAN_MAX = 8;
+
+function makeWingmanMesh(type) {
+  const g = new THREE.Group();
+  if (type === 'scout') {
+    // Sleek blue fighter
+    const mat = new THREE.MeshStandardMaterial({color:0x44aaff,emissive:0x0055ff,emissiveIntensity:1.4,metalness:0.7,roughness:0.2});
+    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.08,1.4,8),mat);
+    fuse.rotation.z=Math.PI/2; g.add(fuse);
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(2.0,0.05,0.55),mat);
+    wing.position.set(0,0,0.1); g.add(wing);
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.14,8,6),
+      new THREE.MeshBasicMaterial({color:0x88eeff}));
+    glow.position.set(0.72,0,0); g.add(glow);
+  } else if (type === 'gunship') {
+    // Heavy green gunship
+    const mat = new THREE.MeshStandardMaterial({color:0x44ff88,emissive:0x00cc44,emissiveIntensity:1.2,metalness:0.5,roughness:0.3});
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.0,0.3,0.6),mat);
+    g.add(body);
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(2.4,0.06,0.7),mat);
+    wing.position.set(0,0,0.1); g.add(wing);
+    // Twin cannons
+    for(const cx of [-0.25,0.25]){
+      const can = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.5,6),mat);
+      can.rotation.z=Math.PI/2; can.position.set(-0.75,cx,0); g.add(can);
+    }
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.18,8,6),
+      new THREE.MeshBasicMaterial({color:0x88ffaa}));
+    glow.position.set(0.6,0,0); g.add(glow);
+  } else {
+    // Drone — small golden orb with ring
+    const mat = new THREE.MeshStandardMaterial({color:0xffcc00,emissive:0xff8800,emissiveIntensity:1.8,metalness:0.8,roughness:0.1});
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.28,12,8),mat);
+    g.add(core);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.44,0.07,6,16),mat);
+    ring.rotation.x=Math.PI/2; g.add(ring);
+  }
+  g.scale.set(0.62,0.62,0.62);
+  return g;
+}
+
+function addWingman() {
+  if (wingmen.length >= WINGMAN_MAX) return;
+  const type = WINGMAN_TYPES[wingmen.length % WINGMAN_TYPES.length];
+  const mesh = makeWingmanMesh(type);
+  scene.add(mesh);
+  const labels = {scout:'偵察機+1',gunship:'砲撃機+1',drone:'ドローン+1'};
+  const colors = {scout:'#44aaff',gunship:'#44ff88',drone:'#ffcc00'};
+  wingmen.push({ mesh, type, idx: wingmen.length, shootCd: 0 });
+  spawnFloat(playerX, playerMesh.position.y+1.5, PLAYER_Z, labels[type], colors[type]);
+  beep(880,0.06); beep(1100,0.10);
+}
+
+function updateWingmen() {
+  const n = wingmen.length;
+  if (n === 0) return;
+  wingmen.forEach((w, i) => {
+    // Formation: fan out in arc around player
+    const spread = Math.min(0.55, 0.8 / Math.max(1, n - 1));
+    const angle = n === 1 ? 0 : ((i - (n-1)/2) * spread * Math.PI);
+    const orbitR = 1.6 + Math.floor(i/4) * 1.2;
+    const tx = playerMesh.position.x + Math.sin(angle) * orbitR;
+    const ty = playerMesh.position.y + Math.cos(angle) * 0.5 + 0.4;
+    w.mesh.position.x += (tx - w.mesh.position.x) * 0.10;
+    w.mesh.position.y += (ty - w.mesh.position.y) * 0.10;
+    w.mesh.position.z = PLAYER_Z - 0.4;
+
+    // Drone type: slowly rotate its ring
+    if (w.type === 'drone') w.mesh.children[1].rotation.z += 0.06;
+
+    if (w.shootCd > 0) { w.shootCd--; return; }
+    if (shootCooldown < 5) {
+      // Scout: fast single, Gunship: twin burst, Drone: wide spread
+      const fireRates = {scout:14, gunship:28, drone:20};
+      w.shootCd = fireRates[w.type] + i * 3;
+      const bz  = w.mesh.position.z - 0.8;
+      const by  = w.mesh.position.y + 0.2;
+      const targetZ = aimTarget ? aimTarget.z - 0.5 : -12;
+      const targetY = aimTarget ? aimTarget.y : 4.5;
+      const dz = targetZ - bz, dy = targetY - by;
+      const len = Math.sqrt(dz*dz + dy*dy);
+      const colors = {scout:0x44aaff, gunship:0x44ff88, drone:0xffcc00};
+      const shots = w.type === 'gunship' ? [[-0.18,0],[0.18,0]] :
+                    w.type === 'drone'   ? [[-0.3,-0.008],[0,0],[0.3,0.008]] :
+                    [[0,0]];
+      shots.forEach(([dx, dvx]) => {
+        const m = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.06,0.06,0.6,5),
+          new THREE.MeshBasicMaterial({color:colors[w.type]})
+        );
+        m.rotation.x=Math.PI/2;
+        m.position.set(w.mesh.position.x+dx, by, bz);
+        scene.add(m);
+        bullets.push({mesh:m, x:w.mesh.position.x+dx, y:by, z:bz,
+          vz:0.58*(dz/len), vy:0.58*(dy/len), vx:dvx});
+      });
+    }
+  });
 }
 
 // ── Floating text sprites ─────────────────────────────────────────────────
@@ -891,8 +1384,11 @@ function startGame(){
   [bullets,eBullets,powerUps,pSystems,floats].forEach(arr=>{
     arr.forEach(o=>scene.remove(o.mesh||o.pts||o.sp)); arr.length=0;
   });
+  rings.forEach(r=>scene.remove(r.mesh)); rings.length=0;
   dying.forEach(d=>scene.remove(d.mesh)); dying.length=0;
-  rapidTimer=0;tripleTimer=0;shootCooldown=0;streak=0;streakTimer=0;shakeTimer=0;flashTimer=0;
+  inv.rapid=0;inv.triple=0;inv.bomb=0;
+  wingmen.forEach(w => scene.remove(w.mesh)); wingmen.length=0;
+  shootCooldown=0;streak=0;streakTimer=0;shakeTimer=0;vigTimer=0;
   if(ufo){scene.remove(ufo.mesh);ufo=null;}
   ufoTimer=1200+Math.floor(Math.random()*1200);
   playerX=0;playerY=0.5;
@@ -900,6 +1396,7 @@ function startGame(){
   initGrid();initBarriers();
   hideOverlay();hudEl.classList.add('visible');
   if(legendEl) legendEl.classList.add('visible');
+  buildPUSlots();
   updateHUD();startBGM();
 }
 
@@ -907,7 +1404,8 @@ function nextLevel(){
   level++;frame=0;
   [bullets,eBullets,powerUps].forEach(arr=>{arr.forEach(o=>scene.remove(o.mesh));arr.length=0;});
   dying.forEach(d=>scene.remove(d.mesh)); dying.length=0;
-  rapidTimer=0;tripleTimer=0;streak=0;streakTimer=0;
+  // inv keeps across waves intentionally
+  streak=0;streakTimer=0;
   if(ufo){scene.remove(ufo.mesh);ufo=null;}
   initGrid();initBarriers();updateHUD();
 }
@@ -919,10 +1417,8 @@ function dXZ(a,b){return Math.sqrt((a.x-b.x)**2+(a.z-b.z)**2);}
 function update(){
   if(transState!==0){updateTransition();updateFloats();return;}
   frame++;
-  if(rapidTimer >0)rapidTimer--;
-  if(tripleTimer>0)tripleTimer--;
   if(streakTimer>0&&--streakTimer===0)streak=0;
-  updateUFO();updateFloats();updateParticles();updateDying();
+  updateUFO();updateWingmen();updateFloats();updateParticles();updateDying();
 
   if(inp.left)  playerX=Math.max(-PLAYER_LIMIT,playerX-PLAYER_SPEED);
   if(inp.right) playerX=Math.min( PLAYER_LIMIT,playerX+PLAYER_SPEED);
@@ -957,7 +1453,10 @@ function update(){
   }
 
   if(shootCooldown>0)shootCooldown--;
-  const maxB=rapidTimer>0?3:1, cd=rapidTimer>0?5:15;
+  // rapid: ×1→3shot cd5  ×2→5shot cd3  ×3→7shot cd2  ×4→10shot cd1  ×5→15shot cd1
+  const rapidLv = inv.rapid;
+  const maxB = [1,3,5,7,10,15][Math.min(5, rapidLv)];
+  const cd   = [15,5,3,2,1,1][Math.min(5, rapidLv)];
   if(bullets.length<maxB&&shootCooldown===0){spawnBullets();shootCooldown=cd;}
 
   for(let i=bullets.length-1;i>=0;i--){
@@ -971,17 +1470,27 @@ function update(){
   }
 
   for(let i=powerUps.length-1;i>=0;i--){
-    const pu=powerUps[i]; pu.z+=pu.vz; pu.mesh.position.z=pu.z; pu.mesh.rotation.y+=0.06;
+    const pu=powerUps[i]; pu.z+=pu.vz; pu.age=(pu.age||0)+1;
+    pu.mesh.position.z=pu.z;
+    // Type-specific rotation speeds
+    if(pu.type==='rapid')       { pu.mesh.rotation.y+=0.18; pu.mesh.rotation.x+=0.12; }
+    else if(pu.type==='triple') { pu.mesh.rotation.z+=0.08; pu.mesh.rotation.y+=0.05; }
+    else if(pu.type==='bomb')   { pu.mesh.rotation.y+=0.04; pu.mesh.rotation.x+=0.03; }
+    else                        { pu.mesh.rotation.y+=0.07; }
+    // Pulsing scale (sine wave)
+    const pulse = 1.0 + Math.sin(pu.age * 0.12) * 0.15;
+    pu.mesh.scale.setScalar(pulse);
     if(pu.z>15){scene.remove(pu.mesh);powerUps.splice(i,1);continue;}
     if(Math.abs(pu.x-playerX)<1.3&&Math.abs(pu.z-PLAYER_Z)<1.5){
       collectPU(pu.type,pu.x,pu.y,pu.z);scene.remove(pu.mesh);powerUps.splice(i,1);
     }
   }
+  updateRings();
 
   if(--invTimer<=0){invTimer=invTick;stepInvaders();if(state!=='playing')return;}
 
   if(--eShootTimer<=0){
-    eShootTimer=Math.max(30,80-level*6)+Math.floor(Math.random()*30);
+    eShootTimer=70+Math.floor(Math.random()*30);
     const alive=grid.filter(i=>i.alive);
     if(alive.length){
       const cols=[...new Set(alive.map(i=>i.col))];
@@ -1002,7 +1511,7 @@ function update(){
     waveCleared=true; if(ufo){scene.remove(ufo.mesh);ufo=null;} saveHi();
     aimTarget=null; reticleSp.material.opacity=0;
     spawnExplosion(0,3,-5,0xffaa44,true); beep(523,0.08);beep(659,0.1);beep(784,0.25);
-    triggerFlash('#ffaa44', 0.55);
+    triggerVignette('#ffaa44', 0.5); triggerFovPulse(8);
     startTransition(`WAVE ${level} CLEAR!`,()=>nextLevel());
   }
 }
@@ -1012,11 +1521,11 @@ function stepInvaders(){
   if(!alive.length)return;
   const maxX=Math.max(...alive.map(i=>i.x)), minX=Math.min(...alive.map(i=>i.x));
   let advance=false;
-  if(invDir===1 &&maxX+invStepX>9.5){invDir=-1;advance=true;}
-  if(invDir===-1&&minX-invStepX<-9.5){invDir=1; advance=true;}
+  if(invDir===1 &&maxX+invStepX>invBoundX){invDir=-1;advance=true;}
+  if(invDir===-1&&minX-invStepX<-invBoundX){invDir=1; advance=true;}
   alive.forEach(inv=>{
     inv.x+=invStepX*invDir;
-    if(advance){inv.z+=invAdvZ;invTick=Math.max(5,invTick-0.35);}
+    if(advance){inv.z+=invAdvZ;}
     inv.mesh.position.x=inv.x; inv.mesh.position.z=inv.z;
     if(inv.z>PLAYER_Z-3){state='dead';saveHi();showOverlay('GAME OVER',String(score).padStart(6,'0'),'TAP TO RETRY');}
   });
@@ -1031,7 +1540,8 @@ function checkCollisions(){
         spawnFloat(ufo.x,ufo.y+1,ufo.z,`+${p}`,'#ff3366');
         spawnExplosion(ufo.x,ufo.y,ufo.z,0xff3366,true);
         beep(880,0.08);beep(660,0.12);beep(440,0.18);
-        triggerFlash('#ff3366',0.4); addStreak(ufo.x,ufo.y,ufo.z);
+        triggerVignette('#ff3366',0.5); triggerFovPulse(9); addStreak(ufo.x,ufo.y,ufo.z);
+        addWingman();
         scene.remove(ufo.mesh);ufo=null;scene.remove(b.mesh);bullets.splice(bi,1);break;
       }
     }
@@ -1043,12 +1553,12 @@ function checkCollisions(){
       if(!inv.alive)continue;
       if(dXZ(b,inv)<0.92&&Math.abs(b.y-inv.y)<3.0){
         const p=(inv.type==='A'?30:inv.type==='B'?20:10)*mult();
-        score+=p;saveHi();invTick=Math.max(4,invTick-0.3);
+        score+=p;saveHi();
         spawnExplosion(inv.x,inv.y,inv.z,new THREE.Color(CH[inv.type]).getHex(),false);
         spawnFloat(inv.x,inv.y+0.9,inv.z,`+${p}`,CH[inv.type]);
         beep(250+Math.random()*250,0.14);
         maybeDrop(inv.x,inv.y,inv.z); addStreak(inv.x,inv.y,inv.z);
-        triggerFlash(CH[inv.type],0.2); shakeTimer=6;shakeAmt=0.12;
+        triggerVignette(CH[inv.type],0.28); triggerFovPulse(4); shakeTimer=6;shakeAmt=0.12;
         killInvader(inv); scene.remove(b.mesh);bullets.splice(bi,1);
         continue outer;
       }
@@ -1079,7 +1589,7 @@ function checkCollisions(){
     if(blocked)continue;
     if(dXZ(b,{x:playerX,z:PLAYER_Z})<1.2&&Math.abs(b.y-playerMesh.position.y)<1.2){
       lives--;shakeTimer=12;shakeAmt=0.2;beep(80,0.45,'sawtooth');
-      triggerFlash('#ff4444',0.45);
+      triggerVignette('#ff2222',0.55);
       scene.remove(b.mesh);eBullets.splice(i,1);updateHUD();
       if(lives<=0){state='dead';saveHi();showOverlay('GAME OVER',String(score).padStart(6,'0'),'TAP TO RETRY');}
     }
@@ -1159,11 +1669,11 @@ function updateSky() {
   moonMesh.position.set(Math.sin(moonAng) * 150, Math.cos(moonAng) * 125 - 8, -220);
   moonMesh.visible = timeOfDay < 0.23 || timeOfDay > 0.77;
 
-  // Stars fade in/out around dawn and dusk
+  // Stars fade in/out — visible all night, fade at dawn/dusk
   let starOp;
-  if (timeOfDay < 0.23) starOp = 1;
-  else if (timeOfDay < 0.31) starOp = 1 - (timeOfDay - 0.23) / 0.08;
-  else if (timeOfDay > 0.77) starOp = Math.min(1, (timeOfDay - 0.77) / 0.07);
+  if (timeOfDay < 0.25) starOp = 1;
+  else if (timeOfDay < 0.33) starOp = 1 - (timeOfDay - 0.25) / 0.08;
+  else if (timeOfDay > 0.76) starOp = Math.min(1, (timeOfDay - 0.76) / 0.06);
   else starOp = 0;
   starMesh.material.opacity = Math.max(0, starOp);
 
@@ -1173,48 +1683,119 @@ function updateSky() {
   sunLight.color.copy(p.sC);
   sunLight.intensity = p.sI;
   sunLight.position.copy(sunObj.position).normalize().multiplyScalar(100);
-  moonLight.intensity = (timeOfDay < 0.23 || timeOfDay > 0.78) ? 0.35 : 0;
+  // Moon intensity: full at midnight, fade at dawn/dusk
+  const isNight = timeOfDay < 0.24 || timeOfDay > 0.83;
+  const moonFade = timeOfDay < 0.24
+    ? Math.min(1, (0.24 - timeOfDay) / 0.04 + 0.5)
+    : Math.min(1, (timeOfDay - 0.83) / 0.05 + 0.5);
+  moonLight.intensity = isNight ? Math.min(1.2, moonFade * 1.2) : 0;
 
   // Fog + clear color
   scene.fog.color.copy(p.fog);
   scene.fog.density = p.fd;
   renderer.setClearColor(p.fog);
 
-  // Water — darker at night, horizon-tinted emissive
+  // Water — moonlit reflection at night
   const nightness = Math.max(0, 1 - p.sI / 2.0);
-  waterMat.color.lerpColors(new THREE.Color(0x1a3a5c), new THREE.Color(0x03070e), nightness);
-  waterMat.emissive.lerpColors(new THREE.Color(0x0a1828), new THREE.Color(0x100408), nightness);
-  waterMat.emissiveIntensity = 0.15 + nightness * 0.35;
+  const moonRefl  = moonLight.intensity / 1.2; // 0→1
+  // Daytime: deep blue; Night: dark navy with blue-silver moonlit shimmer
+  waterMat.color.lerpColors(new THREE.Color(0x1a3a5c), new THREE.Color(0x0a1830), nightness);
+  waterMat.emissive.lerpColors(
+    new THREE.Color(0x0a1828),
+    new THREE.Color(0x1a2e50), // blue-silver moon reflection
+    moonRefl
+  );
+  waterMat.emissiveIntensity = 0.15 + moonRefl * 0.65 + nightness * 0.1;
+  waterMat.metalness = 0.5 + moonRefl * 0.35;
 
-  // Night factor for city lights (starts when sun sets below ~sI<1.0)
-  const nightFactor = Math.max(0, Math.min(1, (1.0 - p.sI) * 1.4 - 0.3));
+  // Night factor for city lights (starts when sun sets)
+  const nightFactor = Math.max(0, Math.min(1, (1.0 - p.sI) * 1.4 - 0.2));
 
-  // Building emissive glow (warm window light)
-  nightEmissiveMats.forEach(m => { m.emissiveIntensity = nightFactor * 0.85; });
+  // Building emissive glow — warm windows, brighter at night
+  nightEmissiveMats.forEach(m => { m.emissiveIntensity = nightFactor * 1.2; });
 
-  // Window planes
-  nightWindowMats.forEach(m => { m.opacity = nightFactor * 0.82; });
+  // Window planes — clearly visible at night
+  nightWindowMats.forEach(m => { m.opacity = nightFactor * 0.92; });
 
   // Rainbow bridge lights
-  bridgeLightMats.forEach(m => { m.opacity = nightFactor * 0.9; });
+  bridgeLightMats.forEach(m => { m.opacity = nightFactor * 0.95; });
 
-  // City ambient fill light
-  cityGlow.intensity = nightFactor * 2.8;
+  // City ambient fill light — stronger & warmer at night
+  cityGlow.intensity = nightFactor * 4.5;
+  cityGlow.color.lerpColors(new THREE.Color(0xffaa44), new THREE.Color(0xff8822), nightFactor);
+
+  // ── Weather state machine ──────────────────────────────────────────────
+  weatherTimer--;
+  if (weatherTimer <= 0) {
+    weatherState = weatherTarget;
+    weatherIntensity = 0.0;
+    nextWeather();
+  }
+  weatherIntensity = Math.min(1.0, weatherIntensity + 0.003);
+
+  // Interpolation helpers per weather state
+  const wCloud  = { clear:0.0, cloudy:0.85, rain:1.0,  fog:0.6,  storm:1.0  }[weatherState];
+  const wFogDen = { clear:0.0, cloudy:0.0,  rain:0.5,  fog:1.0,  storm:0.6  }[weatherState];
+  const wDark   = { clear:0.0, cloudy:0.25, rain:0.55, fog:0.2,  storm:0.80 }[weatherState];
+  const wWind   = { clear:1.0, cloudy:1.5,  rain:3.0,  fog:0.6,  storm:5.0  }[weatherState];
+
+  const wi = weatherIntensity;
+  const cloudCover  = wCloud  * wi;
+  const extraFog    = wFogDen * wi;
+  const darkening   = wDark   * wi;
+  const windMult    = 1.0 + (wWind - 1.0) * wi;
+
+  // Override fog density with weather
+  const baseFd = p.fd;
+  const weatherFd = baseFd + extraFog * 0.014;
+  scene.fog.density = weatherFd;
 
   // Cloud color and drift
   cloudGroups.forEach(c => {
-    c.position.x += c._wind;
+    c.position.x += c._wind * windMult;
     if (c.position.x > 130) c.position.x = -130;
     else if (c.position.x < -130) c.position.x = 130;
-    const brightness = Math.max(0.18, Math.min(1.0, p.sI / 3.0));
+    const brightness = Math.max(0.18, Math.min(1.0, p.sI / 3.0)) * (1.0 - darkening * 0.6);
     const warmth = (timeOfDay > 0.22 && timeOfDay < 0.32) ? 0.12 :
                    (timeOfDay > 0.72 && timeOfDay < 0.82) ? 0.10 : 0;
     c.children.forEach(ch => {
       if (ch.isMesh && ch.material) {
         ch.material.color.setRGB(brightness + warmth, brightness + warmth * 0.5, brightness);
+        // More clouds visible in bad weather
+        ch.material.opacity = 0.90 * (0.3 + cloudCover * 0.7 + (1 - cloudCover) * (ch.material.opacity || 0.9));
       }
     });
+    // Lower clouds in storm/rain
+    const targetY = c._baseY !== undefined ? c._baseY : c.position.y;
+    if (c._baseY === undefined) c._baseY = c.position.y;
+    c.position.y = c._baseY - cloudCover * 8;
   });
+
+  // Rain particles
+  const isRainy = weatherState === 'rain' || weatherState === 'storm';
+  const rainOpacity = isRainy ? Math.min(weatherState === 'storm' ? 0.7 : 0.45, wi * 0.8) : Math.max(0, rainMesh.material.opacity - 0.005);
+  rainMesh.material.opacity = rainOpacity;
+  if (rainOpacity > 0.01) {
+    const rainPos = rainGeo.attributes.position.array;
+    const dropSpeed = weatherState === 'storm' ? 1.8 : 0.9;
+    for (let i = 0; i < rainPos.length; i += 3) {
+      rainPos[i+1] -= dropSpeed;
+      rainPos[i]   += (weatherState === 'storm' ? -0.4 : -0.1);  // wind slant
+      if (rainPos[i+1] < -5) {
+        rainPos[i]   = (Math.random() - 0.5) * 260;
+        rainPos[i+1] = 80 + Math.random() * 20;
+        rainPos[i+2] = (Math.random() - 0.5) * 200 - 80;
+      }
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+  }
+
+  // Darken sky for overcast weather
+  if (darkening > 0) {
+    skyUni.uZenith.value.multiplyScalar(1 - darkening * 0.5);
+    skyUni.uMidSky.value.multiplyScalar(1 - darkening * 0.4);
+    skyUni.uHorizon.value.multiplyScalar(1 - darkening * 0.3);
+  }
 
   // Planes
   updatePlanes();
@@ -1249,10 +1830,6 @@ function animate(){
   if(Math.abs(camera.fov-fovTarget)>0.1){
     camera.fov+=(fovTarget-camera.fov)*0.12;
     camera.updateProjectionMatrix();
-  }
-  if(flashTimer>0){
-    flashTimer--;
-    if(flashTimer===0&&flashEl){ flashEl.style.transition='opacity 0.18s ease-out'; flashEl.style.opacity=0; }
   }
   renderer.render(scene,camera);
 }
