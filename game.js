@@ -4,17 +4,17 @@ import * as THREE from 'three';
 const canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setClearColor(0x7ab8d4);
+renderer.setClearColor(0x88c0d8);
 
 // ── Scene & Camera ────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x7ab8d4, 0.009);
+scene.fog = new THREE.FogExp2(0x88c0d8, 0.0065);
 
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
-camera.position.set(0, 10, 22);
-camera.lookAt(0, 2, 0);
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 300);
+camera.position.set(0, 16, 34);
+camera.lookAt(0, 2, -10);
 let camTargetX = 0;
-let fovTarget = 55;
+let fovTarget = 60;
 
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -26,9 +26,9 @@ window.addEventListener('resize', resize);
 resize();
 
 // ── Lights (daytime Tokyo) ────────────────────────────────────────────────
-scene.add(new THREE.HemisphereLight(0x99bbff, 0xcc9966, 3.0));
-const sunLight = new THREE.DirectionalLight(0xfff5e0, 4.5);
-sunLight.position.set(15, 40, 8);
+scene.add(new THREE.HemisphereLight(0xaaccff, 0xbb9966, 2.8));
+const sunLight = new THREE.DirectionalLight(0xfff8e8, 4.0);
+sunLight.position.set(20, 50, 10);
 scene.add(sunLight);
 const playerGlow = new THREE.PointLight(0x4fc3f7, 8, 14);
 scene.add(playerGlow);
@@ -39,81 +39,213 @@ scene.add(invGlow);
 // ── Sun ───────────────────────────────────────────────────────────────────
 {
   const sunMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(4, 16, 8),
+    new THREE.SphereGeometry(5, 16, 8),
     new THREE.MeshBasicMaterial({ color: 0xfffbe8 })
   );
-  sunMesh.position.set(50, 80, -80);
+  sunMesh.position.set(60, 90, -100);
   scene.add(sunMesh);
   const halo = new THREE.Mesh(
-    new THREE.SphereGeometry(7, 16, 8),
-    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.08 })
+    new THREE.SphereGeometry(9, 16, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.06 })
   );
   halo.position.copy(sunMesh.position);
   scene.add(halo);
 }
 
-// ── City scene ────────────────────────────────────────────────────────────
+// ── Waterfront plaza ──────────────────────────────────────────────────────
 {
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(120, 120),
-    new THREE.MeshStandardMaterial({ color: 0x889098, roughness: 0.95 })
+  // Rooftop / promenade deck where battle takes place
+  const plaza = new THREE.Mesh(
+    new THREE.PlaneGeometry(35, 55),
+    new THREE.MeshStandardMaterial({ color: 0x909aa0, roughness: 0.92 })
   );
-  floor.rotation.x = -Math.PI / 2; floor.position.y = -1.0;
-  scene.add(floor);
+  plaza.rotation.x = -Math.PI / 2;
+  plaza.position.set(0, -1.0, 2);
+  scene.add(plaza);
 
-  const streetGrid = new THREE.GridHelper(300, 80, 0x556655, 0x334433);
-  streetGrid.position.y = -25;
-  scene.add(streetGrid);
+  // Tokyo Bay water — vast, glittering
+  const water = new THREE.Mesh(
+    new THREE.PlaneGeometry(700, 500),
+    new THREE.MeshStandardMaterial({ color: 0x1a4a7a, roughness: 0.15, metalness: 0.4 })
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(0, -9, -120);
+  scene.add(water);
+
+  // Waterfront quay edge (concrete lip)
+  const edge = new THREE.Mesh(
+    new THREE.BoxGeometry(40, 0.4, 1.0),
+    new THREE.MeshStandardMaterial({ color: 0xaab0b8, roughness: 0.8 })
+  );
+  edge.position.set(0, -1.1, -20);
+  scene.add(edge);
 }
 
-// ── Buildings ─────────────────────────────────────────────────────────────
-function makeWinTex() {
-  const rows=22, cols=10, c=document.createElement('canvas');
-  c.width=cols*8; c.height=rows*8;
-  const cx=c.getContext('2d');
-  cx.fillStyle='#8090a0'; cx.fillRect(0,0,c.width,c.height);
-  for(let r=0;r<rows;r++) for(let cl=0;cl<cols;cl++) {
-    if(Math.random()>0.32){
-      cx.fillStyle=Math.random()>0.5?'#aac8e0':'#1a2a3a';
-      cx.globalAlpha=0.5+Math.random()*0.45;
-      cx.fillRect(cl*8+1,r*8+1,6,6);
+// ── Tower condominiums (タワーマンション) ──────────────────────────────────
+function makeWinTex(residential) {
+  const rows = 28, cols = 8, c = document.createElement('canvas');
+  c.width = cols * 8; c.height = rows * 8;
+  const cx = c.getContext('2d');
+  cx.fillStyle = residential ? '#d0d8e0' : '#8090a0';
+  cx.fillRect(0, 0, c.width, c.height);
+  for (let r = 0; r < rows; r++) for (let cl = 0; cl < cols; cl++) {
+    if (Math.random() > 0.28) {
+      cx.fillStyle = Math.random() > 0.55 ? '#b8d4e8' : (residential ? '#e8eef2' : '#1a2a3a');
+      cx.globalAlpha = 0.55 + Math.random() * 0.4;
+      cx.fillRect(cl * 8 + 1, r * 8 + 1, 6, 6);
     }
   }
-  cx.globalAlpha=1;
-  const t=new THREE.CanvasTexture(c);
-  t.wrapS=t.wrapT=THREE.RepeatWrapping; return t;
+  cx.globalAlpha = 1;
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
 }
 
 {
-  const texPool=[makeWinTex(),makeWinTex(),makeWinTex()];
-  const bColors=[0x7a8898,0x8a98a8,0x6878a0,0x889090,0x9a9890];
-  function addBuilding(x,z,w,d,h){
-    const tex=texPool[Math.floor(Math.random()*3)];
-    const col=bColors[Math.floor(Math.random()*bColors.length)];
-    const faceMat=()=>new THREE.MeshStandardMaterial({map:tex.clone(),roughness:0.6,metalness:0.3,color:col});
-    const topMat=new THREE.MeshStandardMaterial({color:0x708090,roughness:0.85});
-    const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[faceMat(),faceMat(),topMat,topMat,faceMat(),faceMat()]);
-    mesh.position.set(x,h/2-1.0,z); scene.add(mesh);
-    if(h>20&&Math.random()>0.5){
-      const ant=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,h*0.12,6),new THREE.MeshStandardMaterial({color:0xcc3333}));
-      ant.position.set(x,h-1.0+h*0.06,z); scene.add(ant);
+  const condoTex  = [makeWinTex(true),  makeWinTex(true),  makeWinTex(true)];
+  const officeTex = [makeWinTex(false), makeWinTex(false)];
+
+  function addTower(x, z, w, d, h, isResidential) {
+    const texPool = isResidential ? condoTex : officeTex;
+    const tex = texPool[Math.floor(Math.random() * texPool.length)];
+    const col = isResidential
+      ? [0xdde4ec, 0xcdd8e4, 0xe4ecf4, 0xd8e0e8][Math.floor(Math.random() * 4)]
+      : [0x7a8898, 0x8898a8, 0x6878a0][Math.floor(Math.random() * 3)];
+    const fM = () => new THREE.MeshStandardMaterial({ map: tex.clone(), color: col, roughness: 0.55, metalness: 0.35 });
+    const tM = new THREE.MeshStandardMaterial({ color: 0x8899aa, roughness: 0.8 });
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      [fM(), fM(), tM, tM, fM(), fM()]
+    );
+    mesh.position.set(x, h / 2 - 1.0, z);
+    scene.add(mesh);
+    // Rooftop water tank (condos) or antenna
+    if (isResidential && h > 25) {
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.2, 8),
+        new THREE.MeshStandardMaterial({ color: 0x99aabb }));
+      tank.position.set(x + (Math.random() - 0.5) * w * 0.5, h - 1.0 + 0.6, z);
+      scene.add(tank);
+    }
+    if (!isResidential && h > 20) {
+      const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, h * 0.14, 6),
+        new THREE.MeshStandardMaterial({ color: 0xcc3333 }));
+      ant.position.set(x, h - 1.0 + h * 0.07, z);
+      scene.add(ant);
     }
   }
-  const rn=(a,b)=>a+Math.random()*(b-a);
-  for(let z=-28;z<=22;z+=rn(3,7)){
-    addBuilding(rn(-14,-22),z,rn(2,5),rn(2,5),rn(5,32));
-    if(Math.random()>0.45) addBuilding(rn(-22,-32),z+rn(-2,2),rn(3,7),rn(3,6),rn(4,22));
+
+  const rn = (a, b) => a + Math.random() * (b - a);
+
+  // Left bank — tower condos
+  for (let z = -30; z <= 18; z += rn(4, 8)) {
+    addTower(rn(-12, -18), z, rn(2, 4), rn(2, 4), rn(28, 55), true);
+    if (Math.random() > 0.4) addTower(rn(-18, -28), z + rn(-2, 3), rn(3, 6), rn(3, 5), rn(12, 30), false);
   }
-  for(let z=-28;z<=22;z+=rn(3,7)){
-    addBuilding(rn(14,22),z,rn(2,5),rn(2,5),rn(5,32));
-    if(Math.random()>0.45) addBuilding(rn(22,32),z+rn(-2,2),rn(3,7),rn(3,6),rn(4,22));
+  // Right bank — tower condos
+  for (let z = -30; z <= 18; z += rn(4, 8)) {
+    addTower(rn(12, 18), z, rn(2, 4), rn(2, 4), rn(28, 55), true);
+    if (Math.random() > 0.4) addTower(rn(18, 28), z + rn(-2, 3), rn(3, 6), rn(3, 5), rn(12, 30), false);
   }
-  for(let x=-30;x<=30;x+=rn(3,7)){
-    addBuilding(x,rn(-25,-40),rn(3,8),rn(3,7),rn(12,50));
+  // Far background Odaiba-style skyline
+  for (let x = -35; x <= 35; x += rn(4, 9)) {
+    addTower(x, rn(-45, -65), rn(4, 10), rn(4, 8), rn(18, 50), Math.random() > 0.5);
   }
-  for(const sx of[-1,1]){
-    addBuilding(sx*rn(13,16),rn(15,20),rn(3,5),rn(3,5),rn(4,14));
+  // Foreground accent (near camera sides)
+  for (const sx of [-1, 1]) {
+    addTower(sx * rn(14, 17), rn(18, 24), rn(3, 5), rn(3, 5), rn(5, 16), true);
   }
+}
+
+// ── Rainbow Bridge (レインボーブリッジ) ──────────────────────────────────────
+{
+  const g = new THREE.Group();
+  const wMat = new THREE.MeshStandardMaterial({ color: 0xe0e6f0, roughness: 0.7 });
+  const gMat = new THREE.MeshStandardMaterial({ color: 0x7888a0, roughness: 0.8 });
+  const cMat = new THREE.LineBasicMaterial({ color: 0xbbc8d8 });
+
+  // Deck (two-level)
+  g.add((() => { const m = new THREE.Mesh(new THREE.BoxGeometry(92, 0.8, 5), gMat); return m; })());
+  const topDeck = new THREE.Mesh(new THREE.BoxGeometry(92, 0.4, 3.5), gMat);
+  topDeck.position.y = 1.2;
+  g.add(topDeck);
+
+  // Towers — two columns each
+  for (const tx of [-22, 22]) {
+    for (const tz of [-1.8, 1.8]) {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(1.0, 30, 1.0), wMat);
+      col.position.set(tx, 15, tz);
+      g.add(col);
+    }
+    // Cross-beams at intervals
+    for (const ty of [8, 16, 24, 28.5]) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 4.2), wMat);
+      beam.position.set(tx, ty, 0);
+      g.add(beam);
+    }
+    // Top cap
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.7, 5.2), wMat);
+    cap.position.set(tx, 30.3, 0);
+    g.add(cap);
+    // Finial spire
+    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.28, 4, 8), wMat);
+    spire.position.set(tx, 33, 0);
+    g.add(spire);
+  }
+
+  // Main suspension cables (catenary parabola)
+  for (const zOff of [-2.2, 2.2]) {
+    const pts = [];
+    for (let t = 0; t <= 1; t += 0.025) {
+      const x = -44 + t * 88;
+      const dt = t * 2 - 1; // -1 to 1
+      const y = 30 * (1 - dt * dt * 0.62); // sag from 30 (at towers) to ~11.4 (midspan)
+      pts.push(new THREE.Vector3(x, y, zOff));
+    }
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cMat));
+  }
+
+  // Vertical suspenders
+  for (let x = -42; x <= 42; x += 5) {
+    const dt = x / 44;
+    const cabY = 30 * (1 - dt * dt * 0.62);
+    const susp = new THREE.Mesh(
+      new THREE.BoxGeometry(0.07, Math.max(0.1, cabY - 0.5), 0.07),
+      new THREE.MeshBasicMaterial({ color: 0xaabbcc })
+    );
+    susp.position.set(x, (cabY + 0.5) / 2, 0);
+    g.add(susp);
+  }
+
+  g.position.set(4, -17, -82);
+  g.rotation.y = 0.18; // slight angle for perspective
+  scene.add(g);
+}
+
+// ── Tokyo Tower (東京タワー) — distant landmark ────────────────────────────
+{
+  const ttMat = new THREE.MeshStandardMaterial({ color: 0xff6622, emissive: 0x331100, emissiveIntensity: 0.4, roughness: 0.7 });
+  const tt = new THREE.Group();
+  // Four legs narrowing upward
+  for (const [ax, az] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+    for (let i = 0; i < 9; i++) {
+      const t = i / 9;
+      const sz = 0.18 + (1 - t) * 0.7;
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(sz * 0.9, 5, sz * 0.9), ttMat);
+      seg.position.set(ax * (1 - t) * 4, i * 5 + 2.5, az * (1 - t) * 4);
+      tt.add(seg);
+    }
+  }
+  // Upper observation deck band
+  const deck = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 1.5, 8), ttMat);
+  deck.position.set(0, 28, 0);
+  tt.add(deck);
+  // Antenna mast
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 16, 6), ttMat);
+  mast.position.set(0, 43, 0);
+  tt.add(mast);
+  tt.position.set(-52, -17, -60);
+  tt.scale.setScalar(0.75);
+  scene.add(tt);
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────
@@ -297,6 +429,36 @@ const playerMesh = (() => {
 })();
 playerMesh.position.set(0, 0.5, 12);
 scene.add(playerMesh);
+
+// ── Aim reticle ───────────────────────────────────────────────────────────
+const reticleSp = (() => {
+  const c = document.createElement('canvas'); c.width = 80; c.height = 80;
+  const cx = c.getContext('2d');
+  cx.strokeStyle = '#ff6600'; cx.lineWidth = 2.5;
+  // Outer ring
+  cx.beginPath(); cx.arc(40, 40, 33, 0, Math.PI * 2); cx.stroke();
+  // Corner ticks
+  for (let a = 0; a < 4; a++) {
+    const ang = a * Math.PI / 2 + Math.PI / 4;
+    cx.beginPath();
+    cx.moveTo(40 + Math.cos(ang) * 20, 40 + Math.sin(ang) * 20);
+    cx.lineTo(40 + Math.cos(ang) * 33, 40 + Math.sin(ang) * 33);
+    cx.stroke();
+  }
+  // Cross gaps
+  const g = 7, l = 15;
+  cx.beginPath(); cx.moveTo(40 - g - l, 40); cx.lineTo(40 - g, 40); cx.stroke();
+  cx.beginPath(); cx.moveTo(40 + g, 40); cx.lineTo(40 + g + l, 40); cx.stroke();
+  cx.beginPath(); cx.moveTo(40, 40 - g - l); cx.lineTo(40, 40 - g); cx.stroke();
+  cx.beginPath(); cx.moveTo(40, 40 + g); cx.lineTo(40, 40 + g + l); cx.stroke();
+  // Center dot
+  cx.fillStyle = '#ff6600'; cx.beginPath(); cx.arc(40, 40, 2.5, 0, Math.PI * 2); cx.fill();
+  const tex = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, opacity: 0.85 }));
+  sp.scale.set(2.0, 2.0, 1);
+  scene.add(sp);
+  return sp;
+})();
 
 // ── Game state ────────────────────────────────────────────────────────────
 let state = 'title', score = 0, lives = 3, level = 1, frame = 0;
@@ -550,7 +712,7 @@ function updateFloats() {
 function addStreak(x,y,z){
   streak++; streakTimer=90;
   if(streak===3) spawnFloat(x,y+1,z,'COMBO!','#ffdd00');
-  if(streak>=3){ fovTarget=63; setTimeout(()=>fovTarget=55,220); }
+  if(streak>=3){ fovTarget=65; setTimeout(()=>fovTarget=60,220); }
 }
 function mult(){ return streak>=3?2:1; }
 
@@ -658,7 +820,7 @@ function update(){
   if(streakTimer>0&&--streakTimer===0)streak=0;
   updateUFO();updateFloats();updateParticles();updateDying();
 
-  // Player movement (X + Y)
+  // Player movement
   if(inp.left)  playerX=Math.max(-PLAYER_LIMIT,playerX-PLAYER_SPEED);
   if(inp.right) playerX=Math.min( PLAYER_LIMIT,playerX+PLAYER_SPEED);
   if(inp.up)    playerY=Math.min(PLAYER_Y_MAX,playerY+PLAYER_Y_SPEED);
@@ -670,8 +832,23 @@ function update(){
   playerMesh.rotation.z=-playerVX*0.55;
   camTargetX=playerX*0.18;
   camera.position.x+=(camTargetX-camera.position.x)*0.05;
-  camera.lookAt(playerX*0.1,2,0);
+  camera.lookAt(playerX*0.08, 2, -10);
   playerGlow.position.set(playerMesh.position.x,playerMesh.position.y,PLAYER_Z);
+
+  // Update aim reticle
+  {
+    const alive=grid.filter(i=>i.alive);
+    if(alive.length>0){
+      const targetZ=Math.min(...alive.map(i=>i.z))-0.5;
+      const targetY=alive.reduce((s,i)=>s+i.y,0)/alive.length;
+      reticleSp.position.set(playerX, targetY, targetZ);
+      reticleSp.material.opacity=0.8;
+      reticleSp.material.rotation+=0.025;
+      reticleSp.scale.setScalar(1.8+Math.sin(frame*0.1)*0.18);
+    } else {
+      reticleSp.material.opacity=0;
+    }
+  }
 
   // Auto-fire
   if(shootCooldown>0)shootCooldown--;
@@ -724,6 +901,7 @@ function update(){
   // Wave clear
   if(!waveCleared&&grid.every(i=>!i.alive)){
     waveCleared=true; if(ufo){scene.remove(ufo.mesh);ufo=null;} saveHi();
+    reticleSp.material.opacity=0;
     spawnExplosion(0,3,-5,0xffffff); beep(523,0.08);beep(659,0.1);beep(784,0.25);
     triggerFlash('#aaffaa', 0.5);
     startTransition(`WAVE ${level} CLEAR!`,()=>nextLevel());
@@ -747,7 +925,6 @@ function stepInvaders(){
 }
 
 function checkCollisions(){
-  // Bullets vs UFO
   if(ufo){
     for(let bi=bullets.length-1;bi>=0;bi--){
       const b=bullets[bi];
@@ -763,7 +940,6 @@ function checkCollisions(){
     }
   }
 
-  // Bullets vs invaders
   outer:for(let bi=bullets.length-1;bi>=0;bi--){
     const b=bullets[bi];
     for(const inv of grid){
@@ -786,7 +962,6 @@ function checkCollisions(){
     }
   }
 
-  // Bullets vs barriers
   outer2:for(let bi=bullets.length-1;bi>=0;bi--){
     const b=bullets[bi];
     for(const bar of barriers){
@@ -799,7 +974,6 @@ function checkCollisions(){
     }
   }
 
-  // Enemy bullets vs barriers & player
   for(let i=eBullets.length-1;i>=0;i--){
     const b=eBullets[i]; let blocked=false;
     for(const bar of barriers){
@@ -818,7 +992,6 @@ function checkCollisions(){
     }
   }
 
-  // Invaders crush barriers
   for(const inv of grid){
     if(!inv.alive)continue;
     for(const bar of barriers)
@@ -830,9 +1003,9 @@ function checkCollisions(){
 let idleT = 0;
 function idleAnimate(){
   idleT += 0.008;
-  camera.position.x = Math.sin(idleT*0.4)*2.5;
-  camera.position.y = 10 + Math.sin(idleT*0.3)*0.5;
-  camera.lookAt(0,2,0);
+  camera.position.x = Math.sin(idleT*0.4)*3.0;
+  camera.position.y = 16 + Math.sin(idleT*0.3)*0.8;
+  camera.lookAt(0, 2, -10);
   grid.forEach((inv,i)=>{
     if(!inv.alive)return;
     inv.mesh.position.y=inv.y+Math.sin(idleT*2+i*0.4)*0.12;
@@ -851,12 +1024,10 @@ function animate(){
     camera.position.x+=(Math.random()-0.5)*shakeAmt;
     camera.position.y+=(Math.random()-0.5)*shakeAmt*0.5;
   }
-  // FOV pulse
   if(Math.abs(camera.fov-fovTarget)>0.1){
     camera.fov+=(fovTarget-camera.fov)*0.12;
     camera.updateProjectionMatrix();
   }
-  // Flash fade
   if(flashTimer>0){
     flashTimer--;
     if(flashTimer===0&&flashEl){
