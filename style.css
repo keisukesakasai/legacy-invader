@@ -55,6 +55,17 @@ html, body {
 #overlay.hidden { display: none; }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* ── Item Legend ─────────────────────────────────────────────────────── */
+#item-legend {
+  position: absolute; left: 10px; bottom: 76px;
+  font-family: 'Press Start 2P', monospace; font-size: 7px;
+  color: rgba(255,255,255,0.82); line-height: 2.1;
+  pointer-events: none; z-index: 10; display: none;
+  background: rgba(0,0,0,0.45); padding: 6px 8px;
+  border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);
+}
+#item-legend.visible { display: block; }
+
 /* ── Flash ───────────────────────────────────────────────────────────── */
 #flash {
   position: absolute; inset: 0; pointer-events: none;
