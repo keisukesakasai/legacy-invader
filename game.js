@@ -4,11 +4,11 @@ import * as THREE from 'three';
 const canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setClearColor(0xcc4400);
+renderer.setClearColor(0x88c4f0);
 
 // ── Scene & Camera ────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xcc4400, 0.006);
+scene.fog = new THREE.FogExp2(0x88c4f0, 0.004);
 
 const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 350);
 camera.position.set(0, 16, 34);
@@ -25,74 +25,181 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ── Sunset sky dome (gradient) ────────────────────────────────────────────
-{
-  const skyGeo = new THREE.SphereGeometry(280, 28, 28);
-  const pos = skyGeo.attributes.position;
-  const colorArr = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const t = Math.max(0, Math.min(1, (pos.getY(i) / 280 + 1) / 2)); // 0=nadir,1=zenith
-    let r, g, b;
-    if (t < 0.38) {
-      // nadir → horizon: dark brown-orange → bright orange
-      const u = t / 0.38;
-      r = 0.45 + u * 0.55; g = 0.15 + u * 0.32; b = 0.03 + u * 0.07;
-    } else if (t < 0.55) {
-      // horizon band: bright orange → pink-orange
-      const u = (t - 0.38) / 0.17;
-      r = 1.0 - u * 0.18; g = 0.47 - u * 0.22; b = 0.10 + u * 0.12;
-    } else if (t < 0.75) {
-      // above horizon: pink → purple-mauve
-      const u = (t - 0.55) / 0.20;
-      r = 0.82 - u * 0.38; g = 0.25 - u * 0.14; b = 0.22 + u * 0.20;
-    } else {
-      // zenith: deep indigo
-      const u = (t - 0.75) / 0.25;
-      r = 0.44 - u * 0.34; g = 0.11 - u * 0.06; b = 0.42 + u * 0.00;
-    }
-    colorArr[i*3] = r; colorArr[i*3+1] = g; colorArr[i*3+2] = b;
-  }
-  skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(colorArr, 3));
-  scene.add(new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+// ── Time of Day ───────────────────────────────────────────────────────────
+let timeOfDay = 0.40;        // 0=midnight, 0.5=noon, 1=midnight
+const TIME_SPEED = 0.000018; // full cycle ~15 min real time
+
+// Keyframes: t, zenith, midSky, horizon, ground, ambInt, ambColor, sunInt, sunColor, fogColor, fogDensity
+const PHASES = [
+  { t:0.00, zen:0x01010f, mid:0x020318, hor:0x04081e, gnd:0x010108, aI:0.25, aC:0x0a1022, sI:0.0,  sC:0x4060c0, fog:0x02030f, fd:0.003 },
+  { t:0.22, zen:0x08061e, mid:0x0f0820, hor:0x1e0610, gnd:0x030208, aI:0.35, aC:0x18101e, sI:0.05, sC:0x503010, fog:0x060510, fd:0.004 },
+  { t:0.26, zen:0x200e2e, mid:0x3e1a28, hor:0xc85020, gnd:0x0a060e, aI:0.65, aC:0x402018, sI:1.0,  sC:0xff7030, fog:0x963020, fd:0.007 },
+  { t:0.32, zen:0x2858b0, mid:0x4880c0, hor:0xc0a058, gnd:0x182018, aI:1.1,  aC:0x8a6840, sI:2.2,  sC:0xffd080, fog:0x9a8060, fd:0.005 },
+  { t:0.50, zen:0x155aab, mid:0x3382cc, hor:0x88c4f0, gnd:0x204030, aI:1.4,  aC:0x7a9090, sI:3.5,  sC:0xfff8f0, fog:0x88c0e0, fd:0.004 },
+  { t:0.67, zen:0x143898, mid:0x2e68c0, hor:0x78a8d8, gnd:0x203028, aI:1.3,  aC:0x6880a0, sI:3.0,  sC:0xffe898, fog:0x6890c0, fd:0.004 },
+  { t:0.75, zen:0x08051e, mid:0x1c0610, hor:0xe84010, gnd:0x0e0404, aI:0.8,  aC:0x681808, sI:2.2,  sC:0xff5800, fog:0xb02808, fd:0.006 },
+  { t:0.83, zen:0x040310, mid:0x080518, hor:0x2e0618, gnd:0x030206, aI:0.45, aC:0x200810, sI:0.3,  sC:0x703018, fog:0x140508, fd:0.005 },
+  { t:0.92, zen:0x01010f, mid:0x020218, hor:0x04081e, gnd:0x010108, aI:0.25, aC:0x0a1022, sI:0.0,  sC:0x4060c0, fog:0x02030f, fd:0.003 },
+  { t:1.00, zen:0x01010f, mid:0x020318, hor:0x04081e, gnd:0x010108, aI:0.25, aC:0x0a1022, sI:0.0,  sC:0x4060c0, fog:0x02030f, fd:0.003 },
+];
+
+function skyAt(t) {
+  let i = 0;
+  while (i < PHASES.length - 2 && PHASES[i+1].t <= t) i++;
+  const a = PHASES[i], b = PHASES[i+1];
+  const f = Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t)));
+  const lc = (hA, hB) => new THREE.Color(hA).lerp(new THREE.Color(hB), f);
+  const ln = (A, B) => A + (B - A) * f;
+  return {
+    zen: lc(a.zen,b.zen), mid: lc(a.mid,b.mid), hor: lc(a.hor,b.hor), gnd: lc(a.gnd,b.gnd),
+    aI: ln(a.aI,b.aI), aC: lc(a.aC,b.aC), sI: ln(a.sI,b.sI), sC: lc(a.sC,b.sC),
+    fog: lc(a.fog,b.fog), fd: ln(a.fd,b.fd),
+  };
 }
 
-// ── Lights (sunset) ───────────────────────────────────────────────────────
-scene.add(new THREE.HemisphereLight(0x3322aa, 0xdd4400, 2.2));
-const sunLight = new THREE.DirectionalLight(0xff6600, 3.5);
-sunLight.position.set(35, 6, -10);
+// ── Sky shader dome ───────────────────────────────────────────────────────
+const skyUni = {
+  uZenith:  { value: new THREE.Color(0x155aab) },
+  uMidSky:  { value: new THREE.Color(0x3382cc) },
+  uHorizon: { value: new THREE.Color(0x88c4f0) },
+  uGround:  { value: new THREE.Color(0x204030) },
+};
+scene.add(new THREE.Mesh(
+  new THREE.SphereGeometry(280, 32, 20),
+  new THREE.ShaderMaterial({
+    uniforms: skyUni,
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 uZenith, uMidSky, uHorizon, uGround;
+      varying vec3 vDir;
+      void main() {
+        float h = vDir.y;
+        vec3 c;
+        if (h > 0.18)      c = mix(uMidSky, uZenith, smoothstep(0.18, 0.95, h));
+        else if (h > 0.0)  c = mix(uHorizon, uMidSky, smoothstep(0.0, 0.18, h));
+        else               c = mix(uGround, uHorizon, smoothstep(-0.25, 0.0, h));
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+    side: THREE.BackSide,
+    depthWrite: false,
+  })
+));
+
+// ── Lights ────────────────────────────────────────────────────────────────
+const ambLight  = new THREE.AmbientLight(0x7a9090, 1.4);
+scene.add(ambLight);
+const sunLight  = new THREE.DirectionalLight(0xfff8f0, 3.5);
+sunLight.position.set(30, 80, -100);
 scene.add(sunLight);
+const moonLight = new THREE.DirectionalLight(0x4460a0, 0.0);
+moonLight.position.set(-30, 60, -100);
+scene.add(moonLight);
 const playerGlow = new THREE.PointLight(0x4fc3f7, 8, 14);
 scene.add(playerGlow);
 const invGlow = new THREE.PointLight(0xff4422, 3, 35);
 invGlow.position.set(0, 4, -8);
 scene.add(invGlow);
-// Warm horizon fill
-const horizFill = new THREE.PointLight(0xff7700, 2.0, 80);
-horizFill.position.set(0, -5, -50);
-scene.add(horizFill);
+const cityGlow = new THREE.PointLight(0xffaa44, 0.0, 120);
+cityGlow.position.set(0, 5, -60);
+scene.add(cityGlow);
 
-// ── Sunset sun ────────────────────────────────────────────────────────────
-{
-  const sunMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(7, 20, 12),
-    new THREE.MeshBasicMaterial({ color: 0xff5500 })
-  );
-  sunMesh.position.set(38, 1, -160);
-  scene.add(sunMesh);
-  // Glow rings
-  for (const [r, op] of [[10, 0.22],[15, 0.10],[22, 0.05]]) {
-    const h = new THREE.Mesh(
-      new THREE.SphereGeometry(r, 16, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff8833, transparent: true, opacity: op })
-    );
-    h.position.copy(sunMesh.position);
-    scene.add(h);
+// ── Sun ───────────────────────────────────────────────────────────────────
+const sunObj = new THREE.Group();
+sunObj.add(new THREE.Mesh(new THREE.SphereGeometry(6, 20, 12),
+  new THREE.MeshBasicMaterial({ color: 0xfffaee })));
+for (const [r, op, col] of [[9,0.22,0xffee99],[14,0.10,0xffcc66],[21,0.045,0xffaa44]]) {
+  const h = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 8),
+    new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op }));
+  sunObj.add(h);
+}
+sunObj.position.set(-40, 5, -220);
+scene.add(sunObj);
+
+// ── Moon ──────────────────────────────────────────────────────────────────
+const moonMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(5, 16, 10),
+  new THREE.MeshBasicMaterial({ color: 0xdde8f8 })
+);
+moonMesh.position.set(80, 60, -220);
+scene.add(moonMesh);
+
+// ── Stars ─────────────────────────────────────────────────────────────────
+const starMesh = (() => {
+  const N = 1400;
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi   = Math.acos(2 * Math.random() - 1);
+    const r     = 240 + Math.random() * 25;
+    pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    pos[i*3+1] = Math.abs(r * Math.cos(phi)) + 5;
+    pos[i*3+2] = r * Math.sin(phi) * Math.sin(theta);
   }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const m = new THREE.Points(geo,
+    new THREE.PointsMaterial({ color: 0xffffff, size: 0.55, sizeAttenuation: true, transparent: true, opacity: 0.0 })
+  );
+  scene.add(m);
+  return m;
+})();
+
+// ── Clouds ────────────────────────────────────────────────────────────────
+const cloudGroups = [];
+function makeCloud(x, y, z, sc, windSpd) {
+  const g = new THREE.Group();
+  const blobs = [
+    [0,0,0,1.0],[1.5,0.25,0.1,0.88],[-1.3,0.15,-0.15,0.82],
+    [2.8,0.08,0.25,0.74],[-2.6,0.05,-0.1,0.70],
+    [0.7,0.62,0.35,0.80],[-0.6,0.58,-0.22,0.75],[1.9,0.52,0.12,0.68],
+    [0.3,-0.18,0.65,0.68],[-1.6,-0.14,-0.32,0.64],
+    [4.0,-0.08,0.1,0.60],[-3.8,0.02,0.22,0.57],
+    [0.5,0.92,0,0.65],[-0.8,0.85,0.2,0.60],
+  ];
+  blobs.forEach(([bx,by,bz,r]) => {
+    const br = by > 0.5 ? 1.0 : (by > 0.1 ? 0.96 : 0.88);
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(r * sc, 7, 5),
+      new THREE.MeshLambertMaterial({ color: new THREE.Color(br, br, br * 1.01), transparent: true, opacity: 0.90 })
+    );
+    m.position.set(bx * sc, by * sc, bz * sc);
+    g.add(m);
+  });
+  g.position.set(x, y, z);
+  g._wind = windSpd;
+  scene.add(g);
+  cloudGroups.push(g);
+}
+{
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  makeCloud(  0, 38, -110, rnd(5,9),   0.012);
+  makeCloud(-40, 42, -140, rnd(6,10),  0.008);
+  makeCloud( 55, 40, -120, rnd(4,8),   0.015);
+  makeCloud(-70, 46, -160, rnd(5,9),   0.010);
+  makeCloud( 80, 39, -150, rnd(6,10),  0.007);
+  makeCloud( 20, 52, -185, rnd(7,12),  0.009);
+  makeCloud(-50, 36, -95,  rnd(4,7),   0.013);
+  makeCloud( 30, 45, -85,  rnd(3,6),   0.016);
+  makeCloud(-25, 58, -210, rnd(8,14),  0.006);
+  makeCloud( 65, 54, -195, rnd(7,12),  0.008);
+  makeCloud(-90, 41, -130, rnd(5,9),   0.011);
+  makeCloud( 95, 36, -105, rnd(4,8),   0.014);
+  makeCloud(-15, 48, -240, rnd(9,15),  0.005);
+  makeCloud( 40, 43, -260, rnd(8,13),  0.006);
 }
 
+// ── Night material registries ─────────────────────────────────────────────
+const nightEmissiveMats = []; // MeshStandardMaterial: emissiveIntensity changes with night
+const nightWindowMats   = []; // MeshBasicMaterial transparent windows: opacity changes
+
 // ── Tokyo Bay water ───────────────────────────────────────────────────────
+let waterMesh, waterMat;
 {
-  // Promenade deck where battle takes place
   const plaza = new THREE.Mesh(
     new THREE.PlaneGeometry(38, 60),
     new THREE.MeshStandardMaterial({ color: 0x302820, roughness: 0.95 })
@@ -100,146 +207,224 @@ scene.add(horizFill);
   plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, -1.0, 0);
   scene.add(plaza);
 
-  // Vast bay water with sunset reflection
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(1000, 600),
-    new THREE.MeshStandardMaterial({
-      color: 0x331100, roughness: 0.12, metalness: 0.55,
-      emissive: 0x992200, emissiveIntensity: 0.18
-    })
-  );
-  water.rotation.x = -Math.PI / 2; water.position.set(0, -9, -120);
-  scene.add(water);
+  waterMat = new THREE.MeshStandardMaterial({
+    color: 0x1a3a5c, roughness: 0.10, metalness: 0.50,
+    emissive: 0x0a1828, emissiveIntensity: 0.25,
+  });
+  waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(1000, 600), waterMat);
+  waterMesh.rotation.x = -Math.PI / 2; waterMesh.position.set(0, -9, -120);
+  scene.add(waterMesh);
 
-  // Quay edge
   const edge = new THREE.Mesh(
     new THREE.BoxGeometry(44, 0.5, 1.2),
-    new THREE.MeshStandardMaterial({ color: 0x604030, roughness: 0.9 })
+    new THREE.MeshStandardMaterial({ color: 0x706050, roughness: 0.9 })
   );
   edge.position.set(0, -1.2, -21);
   scene.add(edge);
 }
 
-// ── Distant building silhouettes (no nearby buildings) ────────────────────
+// ── Building skyline ──────────────────────────────────────────────────────
 {
-  function addSilhouette(x, z, w, d, h) {
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x04030a, roughness: 1.0,
-      emissive: 0x110800, emissiveIntensity: 0.4
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  function addBuilding(x, z, w, d, h) {
+    const isTall = h > 35;
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(0.55 + Math.random()*0.06, 0.08, 0.50 + Math.random()*0.12),
+      roughness: 0.55, metalness: isTall ? 0.42 : 0.18,
+      emissive: new THREE.Color(0.15, 0.10, 0.04), emissiveIntensity: 0.0,
     });
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    mesh.position.set(x, h / 2 - 1.0, z);
-    scene.add(mesh);
-    // Occasional lit window cluster
-    if (h > 20 && Math.random() > 0.5) {
-      const winMat = new THREE.MeshBasicMaterial({ color: 0xffcc44 });
-      for (let k = 0; k < 3 + Math.floor(Math.random() * 4); k++) {
-        const win = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.25), winMat);
-        win.position.set(
-          x + (Math.random() - 0.5) * w * 0.8,
-          (Math.random() * 0.6 + 0.2) * h - 1.0,
-          z - d / 2 - 0.01
-        );
-        scene.add(win);
-      }
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bodyMat);
+    body.position.set(x, h/2 - 1.0, z);
+    scene.add(body);
+    nightEmissiveMats.push(bodyMat);
+
+    // Window rows (become visible at night)
+    const winRows = Math.max(2, Math.floor(h / 3.5));
+    const winW = w * 0.72, winH = (h / winRows) * 0.38;
+    for (let wr = 0; wr < winRows; wr++) {
+      if (Math.random() < 0.25) continue;
+      const wMat = new THREE.MeshBasicMaterial({
+        color: Math.random() < 0.10 ? 0x88ccff : 0xffee88,
+        transparent: true, opacity: 0.0,
+      });
+      const win = new THREE.Mesh(new THREE.PlaneGeometry(winW, winH), wMat);
+      win.position.set(x, h/2 - 1.0 - h/2 + (wr+0.5)*(h/winRows), z - d/2 - 0.02);
+      scene.add(win);
+      nightWindowMats.push(wMat);
     }
-    // Rooftop antenna on tall buildings
-    if (h > 35 && Math.random() > 0.4) {
+
+    if (isTall && Math.random() > 0.4) {
       const ant = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.06, 0.10, h * 0.12, 6),
-        new THREE.MeshBasicMaterial({ color: 0x441100 })
+        new THREE.CylinderGeometry(0.04, 0.09, h*0.09, 6),
+        new THREE.MeshStandardMaterial({ color: 0x888890 })
       );
-      ant.position.set(x, h - 1.0 + h * 0.06, z);
+      ant.position.set(x, h - 1.0 + h*0.045, z);
       scene.add(ant);
     }
   }
 
-  const rn = (a, b) => a + Math.random() * (b - a);
+  for (let z = -32; z >= -78; z -= rnd(4, 9)) {
+    addBuilding(rnd(-16,-32), z, rnd(3,7), rnd(3,6), rnd(18,55));
+    if (Math.random()>0.5) addBuilding(rnd(-28,-44), z+rnd(-2,2), rnd(4,9), rnd(4,7), rnd(10,32));
+  }
+  for (let z = -32; z >= -78; z -= rnd(4, 9)) {
+    addBuilding(rnd(16,32), z, rnd(3,7), rnd(3,6), rnd(18,55));
+    if (Math.random()>0.5) addBuilding(rnd(28,44), z+rnd(-2,2), rnd(4,9), rnd(4,7), rnd(10,32));
+  }
+  for (let x = -30; x <= 30; x += rnd(5, 12)) {
+    addBuilding(x, rnd(-60,-85), rnd(4,13), rnd(5,10), rnd(22,68));
+  }
 
-  // Left distant skyline — only Z < -28 (well behind game area)
-  for (let z = -30; z >= -72; z -= rn(4, 9)) {
-    addSilhouette(rn(-16, -32), z, rn(3, 7), rn(3, 6), rn(18, 58));
-    if (Math.random() > 0.5) addSilhouette(rn(-28, -42), z + rn(-2, 2), rn(4, 9), rn(4, 7), rn(10, 35));
+  // Construction cranes (visible in photo)
+  function addCrane(x, z) {
+    const cMat = new THREE.MeshStandardMaterial({ color: 0xcc3300, roughness: 0.7 });
+    const g = new THREE.Group();
+    const mast = new THREE.Mesh(new THREE.BoxGeometry(0.5, 28, 0.5), cMat);
+    mast.position.y = 14; g.add(mast);
+    const jib = new THREE.Mesh(new THREE.BoxGeometry(22, 0.4, 0.4), cMat);
+    jib.position.set(5, 28.2, 0); g.add(jib);
+    const cjib = new THREE.Mesh(new THREE.BoxGeometry(8, 0.35, 0.35), cMat);
+    cjib.position.set(-8, 27.4, 0); g.add(cjib);
+    const wl = new THREE.Mesh(new THREE.SphereGeometry(0.18, 4, 3),
+      new THREE.MeshBasicMaterial({ color: 0xff3300 }));
+    wl.position.set(15, 28.5, 0); g.add(wl);
+    g.position.set(x, -1, z); scene.add(g);
   }
-  // Right distant skyline
-  for (let z = -30; z >= -72; z -= rn(4, 9)) {
-    addSilhouette(rn(16, 32), z, rn(3, 7), rn(3, 6), rn(18, 58));
-    if (Math.random() > 0.5) addSilhouette(rn(28, 42), z + rn(-2, 2), rn(4, 9), rn(4, 7), rn(10, 35));
-  }
-  // Central background skyline (Odaiba / bay-side)
-  for (let x = -28; x <= 28; x += rn(5, 11)) {
-    addSilhouette(x, rn(-55, -80), rn(4, 12), rn(5, 9), rn(20, 65));
-  }
+  addCrane( 18, -38);
+  addCrane( 25, -45);
+  addCrane(-20, -42);
 }
 
-// ── Rainbow Bridge silhouette ─────────────────────────────────────────────
+// ── Rainbow Bridge ────────────────────────────────────────────────────────
+let bridgeLightMats = [];
 {
   const g = new THREE.Group();
-  const dark = new THREE.MeshStandardMaterial({ color: 0x08060e, roughness: 1.0, emissive: 0x220800, emissiveIntensity: 0.3 });
-  const cMat = new THREE.LineBasicMaterial({ color: 0x221110 });
+  const towerMat = new THREE.MeshStandardMaterial({
+    color: 0xbcb8ae, roughness: 0.65, metalness: 0.28,
+    emissive: 0x080806, emissiveIntensity: 0.0,
+  });
+  const deckMat = new THREE.MeshStandardMaterial({ color: 0xa4a098, roughness: 0.82, metalness: 0.08 });
+  nightEmissiveMats.push(towerMat);
 
-  // Deck
-  g.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(96, 0.9, 5), dark), {}));
+  // Road deck (two levels)
+  g.add(new THREE.Mesh(new THREE.BoxGeometry(100, 0.95, 6.5), deckMat));
+  const upper = new THREE.Mesh(new THREE.BoxGeometry(100, 0.60, 5), deckMat);
+  upper.position.y = 1.9; g.add(upper);
 
   // Towers
-  for (const tx of [-23, 23]) {
-    for (const tz of [-1.8, 1.8]) {
-      const col = new THREE.Mesh(new THREE.BoxGeometry(1.1, 32, 1.1), dark);
-      col.position.set(tx, 16, tz); g.add(col);
+  for (const tx of [-24, 24]) {
+    for (const [lx, lz] of [[-0.85,-2.3],[0.85,-2.3],[-0.85,2.3],[0.85,2.3]]) {
+      const col = new THREE.Mesh(new THREE.BoxGeometry(1.0, 34, 1.0), towerMat);
+      col.position.set(tx+lx, 17, lz); g.add(col);
     }
-    for (const ty of [8, 18, 26, 30]) {
-      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 4.2), dark);
-      beam.position.set(tx, ty, 0); g.add(beam);
+    for (const ty of [8, 17, 25, 30]) {
+      const cb = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.75, 6.0), towerMat);
+      cb.position.set(tx, ty, 0); g.add(cb);
     }
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 5.5), dark);
-    cap.position.set(tx, 32.4, 0); g.add(cap);
-    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.3, 5, 8), dark);
-    spire.position.set(tx, 35.5, 0); g.add(spire);
-    // Beacon lights
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.22, 6, 4),
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(4.5, 1.0, 6.5), towerMat);
+    cap.position.set(tx, 34.5, 0); g.add(cap);
+    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.30, 5.8, 8), towerMat);
+    spire.position.set(tx, 37.5, 0); g.add(spire);
+    const wl = new THREE.Mesh(new THREE.SphereGeometry(0.22, 6, 4),
       new THREE.MeshBasicMaterial({ color: 0xff2200 }));
-    beacon.position.set(tx, 36.5, 0); g.add(beacon);
+    wl.position.set(tx, 40.5, 0); g.add(wl);
   }
 
-  // Suspension cables
-  for (const zOff of [-2.2, 2.2]) {
-    const pts = [];
-    for (let t = 0; t <= 1; t += 0.02) {
-      const x = -46 + t * 92;
-      const dt = t * 2 - 1;
-      pts.push(new THREE.Vector3(x, 32 * (1 - dt * dt * 0.62), zOff));
-    }
-    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cMat));
+  // Main suspension cables
+  const cablePts = [];
+  for (let t = 0; t <= 1; t += 0.015) {
+    const x = -48 + t * 96;
+    const dt = t * 2 - 1;
+    cablePts.push(new THREE.Vector3(x, 34 * (1 - dt * dt * 0.62), 0));
+  }
+  const cMat = new THREE.LineBasicMaterial({ color: 0xd4d0c8 });
+  for (const zOff of [-2.6, 2.6]) {
+    const pts = cablePts.map(p => new THREE.Vector3(p.x, p.y, zOff));
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cMat.clone()));
   }
 
   // Suspenders
-  for (let x = -44; x <= 44; x += 5) {
-    const dt = x / 46;
-    const cY = 32 * (1 - dt * dt * 0.62);
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.07, Math.max(0.1, cY - 0.5), 0.07), dark);
+  for (let x = -46; x <= 46; x += 4.2) {
+    const dt = x / 48;
+    const cY = 34 * (1 - dt * dt * 0.62);
+    const s = new THREE.Mesh(
+      new THREE.BoxGeometry(0.07, Math.max(0.2, cY - 0.5), 0.07),
+      new THREE.MeshBasicMaterial({ color: 0xc8c4bc })
+    );
     s.position.set(x, (cY + 0.5) / 2, 0); g.add(s);
   }
 
-  g.position.set(5, -17, -88); g.rotation.y = 0.16;
+  // Rainbow lights along cables (night only)
+  for (const zOff of [-2.6, 2.6]) {
+    for (let i = 0; i <= 28; i++) {
+      const t = i / 28;
+      const x = -46 + t * 92;
+      const dt = x / 48;
+      const cY = 34 * (1 - dt * dt * 0.62);
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color().setHSL(t, 1.0, 0.55),
+        transparent: true, opacity: 0.0,
+      });
+      const l = new THREE.Mesh(new THREE.SphereGeometry(0.24, 5, 3), mat);
+      l.position.set(x, cY, zOff); g.add(l);
+      bridgeLightMats.push(mat);
+    }
+  }
+
+  g.position.set(5, -17, -88);
+  g.rotation.y = 0.16;
   scene.add(g);
 }
 
-// ── Tokyo Tower silhouette ────────────────────────────────────────────────
+// ── Tokyo Tower ───────────────────────────────────────────────────────────
 {
-  const ttMat = new THREE.MeshBasicMaterial({ color: 0x661100 });
   const tt = new THREE.Group();
+  const redMat = new THREE.MeshStandardMaterial({
+    color: 0xcc3300, roughness: 0.62, metalness: 0.22,
+    emissive: 0x441100, emissiveIntensity: 0.0,
+  });
+  const whiteMat = new THREE.MeshStandardMaterial({
+    color: 0xdddccc, roughness: 0.75, metalness: 0.10,
+    emissive: 0x444444, emissiveIntensity: 0.0,
+  });
+  nightEmissiveMats.push(redMat, whiteMat);
+
   for (const [ax, az] of [[-1,0],[1,0],[0,-1],[0,1]]) {
-    for (let i = 0; i < 9; i++) {
-      const t = i / 9;
-      const sz = 0.18 + (1 - t) * 0.65;
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(sz * 0.9, 5, sz * 0.9), ttMat);
-      seg.position.set(ax * (1 - t) * 4, i * 5 + 2.5, az * (1 - t) * 4);
+    for (let i = 0; i < 12; i++) {
+      const t = i / 12;
+      const sz = 0.14 + (1 - t) * 0.68;
+      const isW = (i===3||i===6||i===9);
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(sz*0.9, 4.5, sz*0.9), isW ? whiteMat : redMat);
+      seg.position.set(ax*(1-t)*4.5, i*4.5+2.25, az*(1-t)*4.5);
       tt.add(seg);
     }
   }
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 16, 6), ttMat);
-  mast.position.set(0, 46, 0); tt.add(mast);
-  tt.position.set(-54, -17, -62); tt.scale.setScalar(0.7);
+
+  for (const [hy, sz] of [[28, 5.2], [47, 3.8]]) {
+    const plat = new THREE.Mesh(new THREE.BoxGeometry(sz, 1.3, sz), whiteMat);
+    plat.position.y = hy; tt.add(plat);
+    const wMat = new THREE.MeshBasicMaterial({ color: 0x88aacc, transparent: true, opacity: 0.7 });
+    for (let k = 0; k < 4; k++) {
+      const ang = k * Math.PI / 2;
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(sz*0.6, 0.8), wMat.clone());
+      w.position.set(Math.cos(ang)*sz*0.52, hy, Math.sin(ang)*sz*0.52);
+      w.rotation.y = ang; tt.add(w);
+    }
+  }
+
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.13, 22, 8), redMat.clone());
+  mast.position.y = 57; tt.add(mast);
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.06, 6, 6), redMat.clone());
+  tip.position.y = 70; tt.add(tip);
+
+  const warnMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
+  for (const hy of [40, 58, 66, 72]) {
+    const wl = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 4), warnMat.clone());
+    wl.position.y = hy; tt.add(wl);
+  }
+
+  tt.position.set(-55, -17, -63); tt.scale.setScalar(0.72);
   scene.add(tt);
 }
 
@@ -489,7 +674,6 @@ function spawnBullets() {
   const mat = new THREE.MeshBasicMaterial({ color: bcolor });
   const bz = playerMesh.position.z - 1.2;
   const by = playerMesh.position.y + 0.3;
-  // Use aimTarget if available, else fallback
   const targetZ = aimTarget ? aimTarget.z - 0.5 : -12;
   const targetY = aimTarget ? aimTarget.y : 4.5;
   const dz = targetZ - bz, dy = targetY - by;
@@ -565,14 +749,12 @@ let powerUps = [];
 function maybeDrop(x, y, z) {
   if (Math.random() > 0.18) return;
   const type = PU_TYPES[Math.floor(Math.random()*4)];
-  // Bigger, more visible power-up orb
   const m = new THREE.Mesh(
     new THREE.SphereGeometry(0.55, 12, 10),
     new THREE.MeshStandardMaterial({ color: PU_COL[type], emissive: PU_COL[type], emissiveIntensity: 3.0, transparent:true, opacity:0.95 })
   );
   m.position.set(x, y, z); scene.add(m);
   powerUps.push({ mesh:m, type, x, y, z, vz:0.045 });
-  // Spawn label above it
   spawnFloat(x, y+1.2, z, {rapid:'⚡',triple:'≡',life:'♥',bomb:'✸'}[type], PU_CHX[type]);
 }
 
@@ -742,7 +924,6 @@ function update(){
   if(streakTimer>0&&--streakTimer===0)streak=0;
   updateUFO();updateFloats();updateParticles();updateDying();
 
-  // Player movement
   if(inp.left)  playerX=Math.max(-PLAYER_LIMIT,playerX-PLAYER_SPEED);
   if(inp.right) playerX=Math.min( PLAYER_LIMIT,playerX+PLAYER_SPEED);
   if(inp.up)    playerY=Math.min(PLAYER_Y_MAX,playerY+PLAYER_Y_SPEED);
@@ -757,7 +938,6 @@ function update(){
   camera.lookAt(playerX*0.08, 2, -10);
   playerGlow.position.set(playerMesh.position.x, playerMesh.position.y, PLAYER_Z);
 
-  // Update aim target — closest invader weighted by XY distance from player
   {
     const alive = grid.filter(i => i.alive);
     if (alive.length > 0) {
@@ -776,12 +956,10 @@ function update(){
     }
   }
 
-  // Auto-fire
   if(shootCooldown>0)shootCooldown--;
   const maxB=rapidTimer>0?3:1, cd=rapidTimer>0?5:15;
   if(bullets.length<maxB&&shootCooldown===0){spawnBullets();shootCooldown=cd;}
 
-  // Move bullets
   for(let i=bullets.length-1;i>=0;i--){
     const b=bullets[i]; b.z+=b.vz; b.x+=b.vx; b.y+=b.vy;
     b.mesh.position.z=b.z; b.mesh.position.x=b.x; b.mesh.position.y=b.y;
@@ -792,7 +970,6 @@ function update(){
     if(b.z>15){scene.remove(b.mesh);eBullets.splice(i,1);}
   }
 
-  // Power-ups
   for(let i=powerUps.length-1;i>=0;i--){
     const pu=powerUps[i]; pu.z+=pu.vz; pu.mesh.position.z=pu.z; pu.mesh.rotation.y+=0.06;
     if(pu.z>15){scene.remove(pu.mesh);powerUps.splice(i,1);continue;}
@@ -914,6 +1091,135 @@ function checkCollisions(){
   }
 }
 
+// ── Airplanes ─────────────────────────────────────────────────────────────
+const planes = [];
+let planeTimer = 500 + Math.floor(Math.random() * 500);
+
+function makePlane() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xe8eef2, roughness: 0.3, metalness: 0.5 });
+  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 5.5, 8), mat);
+  fuse.rotation.z = Math.PI / 2; g.add(fuse);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 1.8), mat);
+  wing.position.set(0, 0, 0.6); g.add(wing);
+  const tailH = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.08, 0.7), mat);
+  tailH.position.set(0, 0, 2.5); g.add(tailH);
+  const tailV = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.0, 0.7), mat);
+  tailV.position.set(0, 0.5, 2.5); g.add(tailV);
+  for (const ex of [-2.8, 2.8]) {
+    const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.16, 1.2, 7), mat);
+    eng.rotation.z = Math.PI / 2; eng.position.set(ex, -0.18, 0.4); g.add(eng);
+  }
+  const redL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 4, 3),
+    new THREE.MeshBasicMaterial({ color: 0xff2020 }));
+  redL.position.set(-5, 0, 0.6); g.add(redL);
+  const greenL = new THREE.Mesh(new THREE.SphereGeometry(0.09, 4, 3),
+    new THREE.MeshBasicMaterial({ color: 0x20ff50 }));
+  greenL.position.set(5, 0, 0.6); g.add(greenL);
+  return g;
+}
+
+function updatePlanes() {
+  if (--planeTimer <= 0) {
+    planeTimer = 450 + Math.floor(Math.random() * 600);
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const p = makePlane();
+    p.position.set(dir === 1 ? -180 : 180, 30 + Math.random() * 35, -55 - Math.random() * 90);
+    p.rotation.y = dir === 1 ? 0 : Math.PI;
+    scene.add(p);
+    planes.push({ mesh: p, dir, speed: 0.32 + Math.random() * 0.18 });
+  }
+  for (let i = planes.length - 1; i >= 0; i--) {
+    const p = planes[i];
+    p.mesh.position.x += p.speed * p.dir;
+    if (Math.abs(p.mesh.position.x) > 185) {
+      scene.remove(p.mesh); planes.splice(i, 1);
+    }
+  }
+}
+
+// ── Sky / Scene Update (runs every frame) ─────────────────────────────────
+function updateSky() {
+  timeOfDay = (timeOfDay + TIME_SPEED) % 1.0;
+  const p = skyAt(timeOfDay);
+
+  // Sky shader uniforms
+  skyUni.uZenith.value.copy(p.zen);
+  skyUni.uMidSky.value.copy(p.mid);
+  skyUni.uHorizon.value.copy(p.hor);
+  skyUni.uGround.value.copy(p.gnd);
+
+  // Sun arc: rises east, sets west; noon at top
+  const sunAng = (timeOfDay - 0.5) * Math.PI * 1.85;
+  sunObj.position.set(Math.sin(sunAng) * 170, Math.cos(sunAng) * 145 - 8, -220);
+  sunObj.visible = timeOfDay > 0.21 && timeOfDay < 0.81;
+
+  // Moon opposite to sun
+  const moonAng = sunAng + Math.PI;
+  moonMesh.position.set(Math.sin(moonAng) * 150, Math.cos(moonAng) * 125 - 8, -220);
+  moonMesh.visible = timeOfDay < 0.23 || timeOfDay > 0.77;
+
+  // Stars fade in/out around dawn and dusk
+  let starOp;
+  if (timeOfDay < 0.23) starOp = 1;
+  else if (timeOfDay < 0.31) starOp = 1 - (timeOfDay - 0.23) / 0.08;
+  else if (timeOfDay > 0.77) starOp = Math.min(1, (timeOfDay - 0.77) / 0.07);
+  else starOp = 0;
+  starMesh.material.opacity = Math.max(0, starOp);
+
+  // Lighting
+  ambLight.color.copy(p.aC);
+  ambLight.intensity = p.aI;
+  sunLight.color.copy(p.sC);
+  sunLight.intensity = p.sI;
+  sunLight.position.copy(sunObj.position).normalize().multiplyScalar(100);
+  moonLight.intensity = (timeOfDay < 0.23 || timeOfDay > 0.78) ? 0.35 : 0;
+
+  // Fog + clear color
+  scene.fog.color.copy(p.fog);
+  scene.fog.density = p.fd;
+  renderer.setClearColor(p.fog);
+
+  // Water — darker at night, horizon-tinted emissive
+  const nightness = Math.max(0, 1 - p.sI / 2.0);
+  waterMat.color.lerpColors(new THREE.Color(0x1a3a5c), new THREE.Color(0x03070e), nightness);
+  waterMat.emissive.lerpColors(new THREE.Color(0x0a1828), new THREE.Color(0x100408), nightness);
+  waterMat.emissiveIntensity = 0.15 + nightness * 0.35;
+
+  // Night factor for city lights (starts when sun sets below ~sI<1.0)
+  const nightFactor = Math.max(0, Math.min(1, (1.0 - p.sI) * 1.4 - 0.3));
+
+  // Building emissive glow (warm window light)
+  nightEmissiveMats.forEach(m => { m.emissiveIntensity = nightFactor * 0.85; });
+
+  // Window planes
+  nightWindowMats.forEach(m => { m.opacity = nightFactor * 0.82; });
+
+  // Rainbow bridge lights
+  bridgeLightMats.forEach(m => { m.opacity = nightFactor * 0.9; });
+
+  // City ambient fill light
+  cityGlow.intensity = nightFactor * 2.8;
+
+  // Cloud color and drift
+  cloudGroups.forEach(c => {
+    c.position.x += c._wind;
+    if (c.position.x > 130) c.position.x = -130;
+    else if (c.position.x < -130) c.position.x = 130;
+    const brightness = Math.max(0.18, Math.min(1.0, p.sI / 3.0));
+    const warmth = (timeOfDay > 0.22 && timeOfDay < 0.32) ? 0.12 :
+                   (timeOfDay > 0.72 && timeOfDay < 0.82) ? 0.10 : 0;
+    c.children.forEach(ch => {
+      if (ch.isMesh && ch.material) {
+        ch.material.color.setRGB(brightness + warmth, brightness + warmth * 0.5, brightness);
+      }
+    });
+  });
+
+  // Planes
+  updatePlanes();
+}
+
 // ── Title idle animation ──────────────────────────────────────────────────
 let idleT = 0;
 function idleAnimate(){
@@ -931,6 +1237,7 @@ function idleAnimate(){
 // ── Render loop ───────────────────────────────────────────────────────────
 function animate(){
   requestAnimationFrame(animate);
+  updateSky();
   if(state==='playing') update();
   else if(state==='title') idleAnimate();
   else if(state==='dead'){ updateParticles();updateFloats();updateDying(); }
